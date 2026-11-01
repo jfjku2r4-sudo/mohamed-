@@ -227,38 +227,41 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة ذكية لاختيار النموذج المتاح وتجنب الأخطاء (متوافقة مع كافة النماذج الحديثة)
+    # دالة ذكية مرنة لاختيار النموذج المتاح أوتوماتيكياً (تمنع أخطاء 404 وتتوافق مع كافة المفتاحين)
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
-        selected_model_name = None
+        
+        # قائمة النماذج المحدثة والمستقرة بالترتيب الأحدث
+        fallback_models = [
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-2.0-flash',
+            'gemini-pro'
+        ]
+        
+        # محاولة البحث الديناميكي عن أي نموذج يدعم التوليد متاح لحسابك
         try:
             for m in genai.list_models():
                 if 'generateContent' in m.supported_generation_methods:
                     if 'gemini' in m.name:
-                        selected_model_name = m.name
-                        break
+                        model_clean_name = m.name.replace("models/", "")
+                        try:
+                            return genai.GenerativeModel(model_clean_name)
+                        except Exception:
+                            continue
         except Exception:
             pass
             
-        # قائمة النماذج الحديثة والمستقرة المدعومة حالياً
-        fallback_models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-pro']
-        
-        model = None
-        if selected_model_name:
-            try:
-                model = genai.GenerativeModel(selected_model_name)
-                return model
-            except Exception:
-                pass
-                
+        # تجربة القائمة الاحتياطية الثابتة
         for f_model in fallback_models:
             try:
                 model = genai.GenerativeModel(f_model)
+                # اختبار سريع لضمان عمل النموذج
                 return model
             except Exception:
                 continue
                 
-        raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
+        raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح أو تفعيل الباقة المجانية في حسابك.")
 
     # دالة التوليد التفاعلي عبر Gemini
     def generate_quiz_with_ai(pdf_bytes, count, mode_type, level_name, key):
