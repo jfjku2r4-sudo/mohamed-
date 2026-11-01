@@ -174,7 +174,7 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.username = input_name.strip()
                     st.success(f"✨ أهلاً بك يا {st.session_state.username}! جاري فتح المنصة...")
-                    st.rerun()
+                    st.experimental_rerun()
                 elif password != "01224982634":
                     st.error("❌ كلمة المرور غير صحيحة.")
                 else:
@@ -216,7 +216,7 @@ else:
         if st.button("🚪 تسجيل الخروج"):
             st.session_state.logged_in = False
             st.session_state.username = ""
-            st.rerun()
+            st.experimental_rerun()
             
         st.markdown("<div style='text-align: center; color: #64748b; margin-top: 20px; font-size:0.85rem;'><b>منصة الامتحانات الذكية</b><br>تطوير: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
 
@@ -227,41 +227,29 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة ذكية مرنة لاختيار النموذج المتاح أوتوماتيكياً (تمنع أخطاء 404 وتتوافق مع كافة المفتاحين)
+    # دالة ذكية ومحدثة تلقائياً لاختيار أحدث النماذج المتاحة وتجنب أي أخطاء
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
         
-        # قائمة النماذج المحدثة والمستقرة بالترتيب الأحدث
-        fallback_models = [
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-2.0-flash',
-            'gemini-pro'
-        ]
+        # قائمة النماذج المحدثة وتشمل النموذج المطلوب حديثاً
+        fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
         
-        # محاولة البحث الديناميكي عن أي نموذج يدعم التوليد متاح لحسابك
-        try:
-            for m in genai.list_models():
-                if 'generateContent' in m.supported_generation_methods:
-                    if 'gemini' in m.name:
-                        model_clean_name = m.name.replace("models/", "")
-                        try:
-                            return genai.GenerativeModel(model_clean_name)
-                        except Exception:
-                            continue
-        except Exception:
-            pass
-            
-        # تجربة القائمة الاحتياطية الثابتة
         for f_model in fallback_models:
             try:
                 model = genai.GenerativeModel(f_model)
-                # اختبار سريع لضمان عمل النموذج
                 return model
             except Exception:
                 continue
                 
-        raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح أو تفعيل الباقة المجانية في حسابك.")
+        # محاولة البحث التلقائي المباشر عن أول نموذج متاح يدعم توليد المحتوى
+        try:
+            for m in genai.list_models():
+                if 'generateContent' in m.supported_generation_methods:
+                    return genai.GenerativeModel(m.name)
+        except Exception:
+            pass
+            
+        raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
     # دالة التوليد التفاعلي عبر Gemini
     def generate_quiz_with_ai(pdf_bytes, count, mode_type, level_name, key):
@@ -421,14 +409,14 @@ else:
                 with c_btn1:
                     if st.button("🔍 العودة للمراجعة", key="back_review"):
                         st.session_state.show_review_warning = False
-                        st.rerun()
+                        st.experimental_rerun()
                 with c_btn2:
                     if st.button("✅ تأكيد التسليم الآن", key="confirm_submit"):
                         st.session_state.submitted_quiz = True
                         st.session_state.submitted_level = st.session_state.current_active_level
                         st.session_state.user_answers = st.session_state.temp_user_answers
                         st.session_state.show_review_warning = False
-                        st.rerun()
+                        st.experimental_rerun()
 
             # عرض النتيجة
             if st.session_state.get("submitted_quiz", False):
@@ -463,7 +451,7 @@ else:
                     st.success("🎉 أداء ممتاز وشامل! استمر في هذا التفوق.")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- تبويب الشات الذكي والتحليل التفاعلي ---
+    # --- تبويب الشات الذكي والتحليل التفاعلي المتوافق مع الإصدارات القديمة ---
     with tab_chat:
         st.markdown("<div class='sub-header'>تحدث مع الذكاء الاصطناعي لتحليل أي جزء من المادة أو طرح الأسئلة والقوانين والمعادلات</div>", unsafe_allow_html=True)
 
@@ -478,6 +466,7 @@ else:
                 st.markdown(f"**🤖 المساعد الذكي:** {chat['assistant']}")
                 st.markdown("---")
 
+            # نموذج إدخال متوافق مع كافة إصدارات Streamlit
             with st.form(key="chat_form", clear_on_submit=True):
                 user_query = st.text_input("اسأل الذكاء الاصطناعي عن أي جزء في المادة، القوانين، أو المسائل...")
                 submit_chat = st.form_submit_button("إرسال السؤال 🚀")
@@ -498,7 +487,8 @@ else:
                             chat_response = model.generate_content([pdf_part, chat_prompt])
                             ans_text = chat_response.text
                             
+                            # حفظ المحادثة في الذاكرة
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
-                            st.rerun()
+                            st.experimental_rerun()
                         except Exception as e:
                             st.error(f"حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: {e}")
