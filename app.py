@@ -174,7 +174,7 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.username = input_name.strip()
                     st.success(f"✨ أهلاً بك يا {st.session_state.username}! جاري فتح المنصة...")
-                    st.experimental_rerun()
+                    st.rerun()
                 elif password != "01224982634":
                     st.error("❌ كلمة المرور غير صحيحة.")
                 else:
@@ -216,7 +216,7 @@ else:
         if st.button("🚪 تسجيل الخروج"):
             st.session_state.logged_in = False
             st.session_state.username = ""
-            st.experimental_rerun()
+            st.rerun()
             
         st.markdown("<div style='text-align: center; color: #64748b; margin-top: 20px; font-size:0.85rem;'><b>منصة الامتحانات الذكية</b><br>تطوير: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
 
@@ -409,14 +409,14 @@ else:
                 with c_btn1:
                     if st.button("🔍 العودة للمراجعة", key="back_review"):
                         st.session_state.show_review_warning = False
-                        st.experimental_rerun()
+                        st.rerun()
                 with c_btn2:
                     if st.button("✅ تأكيد التسليم الآن", key="confirm_submit"):
                         st.session_state.submitted_quiz = True
                         st.session_state.submitted_level = st.session_state.current_active_level
                         st.session_state.user_answers = st.session_state.temp_user_answers
                         st.session_state.show_review_warning = False
-                        st.experimental_rerun()
+                        st.rerun()
 
             # عرض النتيجة
             if st.session_state.get("submitted_quiz", False):
@@ -489,6 +489,6 @@ else:
                             
                             # حفظ المحادثة في الذاكرة
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
-                            st.experimental_rerun()
+                            st.rerun()
                         except Exception as e:
                             st.error(f"حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: {e}")
