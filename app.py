@@ -227,7 +227,7 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة ذكية لاختيار النموذج المتاح وتجنب خطأ 404
+    # دالة ذكية لاختيار النموذج المتاح وتجنب الأخطاء (متوافقة مع كافة النماذج الحديثة)
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
         selected_model_name = None
@@ -240,7 +240,8 @@ else:
         except Exception:
             pass
             
-        fallback_models = ['gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro', 'gemini-1.5-flash-latest']
+        # قائمة النماذج الحديثة والمستقرة المدعومة حالياً
+        fallback_models = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash', 'gemini-pro']
         
         model = None
         if selected_model_name:
