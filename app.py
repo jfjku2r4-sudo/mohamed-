@@ -174,7 +174,7 @@ if not st.session_state.logged_in:
                     st.session_state.logged_in = True
                     st.session_state.username = input_name.strip()
                     st.success(f"✨ أهلاً بك يا {st.session_state.username}! جاري فتح المنصة...")
-                    st.experimental_rerun()
+                    st.rerun()
                 elif password != "01224982634":
                     st.error("❌ كلمة المرور غير صحيحة.")
                 else:
@@ -216,7 +216,7 @@ else:
         if st.button("🚪 تسجيل الخروج"):
             st.session_state.logged_in = False
             st.session_state.username = ""
-            st.experimental_rerun()
+            st.rerun()
             
         st.markdown("<div style='text-align: center; color: #64748b; margin-top: 20px; font-size:0.85rem;'><b>منصة الامتحانات الذكية</b><br>تطوير: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
 
@@ -303,7 +303,6 @@ else:
         response = model.generate_content([pdf_file_part, prompt])
         raw_text = response.text.strip()
         
-        # تم تصحيح استدعاء re.DOTALL بالشكل الصحيح
         match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
         if match:
             clean_json_str = match.group(0)
@@ -382,7 +381,6 @@ else:
                         st.markdown(f"##### ❓ السؤال {i+1}:")
                         st.write(q_item['q']) # دعم معادلات latex
                         
-                        # تفعيل زر التلميحات مباشرة خارج الـ form ليعمل بفاعلية وبدون تأخير
                         hint_key = f"{current_key}_{i}"
                         show_hint_btn = st.checkbox(f"💡 إظهار التلميحة (تستهلك 1 من الفرص)", key=f"chk_hint_{hint_key}")
                         
@@ -419,14 +417,14 @@ else:
                 with c_btn1:
                     if st.button("🔍 العودة للمراجعة", key="back_review"):
                         st.session_state.show_review_warning = False
-                        st.experimental_rerun()
+                        st.rerun()
                 with c_btn2:
                     if st.button("✅ تأكيد التسليم الآن", key="confirm_submit"):
                         st.session_state.submitted_quiz = True
                         st.session_state.submitted_level = st.session_state.current_active_level
                         st.session_state.user_answers = st.session_state.temp_user_answers
                         st.session_state.show_review_warning = False
-                        st.experimental_rerun()
+                        st.rerun()
 
             # عرض النتيجة
             if st.session_state.get("submitted_quiz", False):
@@ -461,7 +459,7 @@ else:
                     st.success("🎉 أداء ممتاز وشامل! استمر في هذا التفوق.")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- تبويب الشات الذكي والتحليل التفاعلي المتوافق مع الإصدارات القديمة ---
+    # --- تبويب الشات الذكي والتحليل التفاعلي ---
     with tab_chat:
         st.markdown("<div class='sub-header'>تحدث مع الذكاء الاصطناعي لتحليل أي جزء من المادة أو طرح الأسئلة والقوانين والمعادلات</div>", unsafe_allow_html=True)
 
@@ -476,7 +474,6 @@ else:
                 st.markdown(f"**🤖 المساعد الذكي:** {chat['assistant']}")
                 st.markdown("---")
 
-            # نموذج إدخال متوافق مع كافة إصدارات Streamlit
             with st.form(key="chat_form", clear_on_submit=True):
                 user_query = st.text_input("اسأل الذكاء الاصطناعي عن أي جزء في المادة، القوانين، أو المسائل...")
                 submit_chat = st.form_submit_button("إرسال السؤال 🚀")
@@ -497,8 +494,7 @@ else:
                             chat_response = model.generate_content([pdf_part, chat_prompt])
                             ans_text = chat_response.text
                             
-                            # حفظ المحادثة في الذاكرة
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
-                            st.experimental_rerun()
+                            st.rerun()
                         except Exception as e:
                             st.error(f"حدث خطأ أثناء الاتصال بالذكاء الاصطناعي: {e}")
