@@ -204,7 +204,7 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini باستخدام النصوص المستخرجة لمنع أخطاء الحصص والحجم
+    # دالة التوليد التفاعلي عبر Gemini مع إجبار النموذج على إخراج JSON صالح 100%
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
         random_seed = random.randint(1000, 999999)
@@ -231,17 +231,7 @@ else:
         2. الإجابات يجب أن تكون واضحة ومحددة.
         3. لكل سؤال أضف تلميحاً مساعداً (hint) لا يكشف الحل مباشرة.
         4. أضف شرحاً تفصيلياً ممتازاً لسبب الإجابة الصحيحة.
-        5. أرجع النتيجة في صيغة JSON حصرية بتنسيق Array of Objects:
-
-        [
-          {{
-            "q": "نص السؤال منظم ومعادلاته بـ LaTeX",
-            "options": ["أ) الاختيار الأول", "ب) الاختيار الثاني", "ج) الاختيار الثالث", "د) الاختيار الرابع"],
-            "answer": "أ) الاختيار الأول",
-            "hint": "تلميح ذكي للحل",
-            "explanation": "الشرح التفصيلي للحل"
-          }}
-        ]
+        5. يجب أن تكون الاستجابة بصيغة JSON صحيحة ومتوافقة تماماً مع المعيار (Array of Objects) بدون أي نصوص أو تعليقات خارجية.
         """
 
         max_retries = 3
@@ -249,7 +239,9 @@ else:
 
         for attempt in range(max_retries):
             try:
-                response = model.generate_content(prompt)
+                # استخدام إعدادات التوليد لفرض صيغة JSON وتجنب أي خطأ في التحليل
+                generation_config = {"response_mime_type": "application/json"}
+                response = model.generate_content(prompt, generation_config=generation_config)
                 raw_text = response.text.strip()
                 
                 match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
@@ -265,7 +257,9 @@ else:
                     if attempt < max_retries - 1:
                         time.sleep(delay * (attempt + 1))
                         continue
-                raise e
+                if attempt == max_retries - 1:
+                    raise e
+                time.sleep(2)
 
     # --- تبويب الاختبارات والتحليل ---
     with tab_exam:
