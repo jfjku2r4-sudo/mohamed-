@@ -191,7 +191,7 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini مع دعم إعادة المحاولة
+    # دالة التوليد التفاعلي عبر Gemini مع نظام إعادة المحاولة الذكي لمنع خطأ 429 من الجذور
     def generate_quiz_with_ai(pdf_bytes, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
         pdf_file_part = {"mime_type": "application/pdf", "data": pdf_bytes}
@@ -229,8 +229,8 @@ else:
         ]
         """
 
-        max_retries = 3
-        delay = 6
+        max_retries = 4
+        delay = 12  # زيادة فترة الانتظار الأولية لتفادي تجاوز حد الدقيقة (5 طلبات)
 
         for attempt in range(max_retries):
             try:
@@ -248,7 +248,9 @@ else:
                 err_str = str(e)
                 if "429" in err_str or "Quota exceeded" in err_str:
                     if attempt < max_retries - 1:
-                        time.sleep(delay)
+                        # مضاعفة وقت الانتظار تلقائياً مع كل محاولة فاشلة
+                        sleep_time = delay * (2 ** attempt)
+                        time.sleep(sleep_time)
                         continue
                 raise e
 
@@ -265,7 +267,7 @@ else:
             else:
                 if st.button("✨ إرسال وإنشاء أسئلة اختبار جديدة"):
                     try:
-                        with st.spinner("جاري تحليل المحتوى وتوليد الأسئلة والمعادلات بالذكاء الاصطناعي بسرعة..."):
+                        with st.spinner("جاري تحليل المحتوى وتوليد الأسئلة والمعادلات بالذكاء الاصطناعي (قد يستغرق بضع ثوانٍ لتجنب ضغط الخادم)..."):
                             bytes_data = uploaded_file.getvalue()
                             st.session_state.pdf_bytes = bytes_data
                             
@@ -273,10 +275,11 @@ else:
                             st.session_state.unlocked_hints = set()
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
+                                # وضع فاصل زمني آمن وطويل نسبياً (12 ثانية) بين كل طلب وطلب لتجاوز حدود الـ RPM المجاني
                                 q_easy = generate_quiz_with_ai(bytes_data, num_questions, "level", "سهل", api_key)
-                                time.sleep(2)
+                                time.sleep(12)
                                 q_med = generate_quiz_with_ai(bytes_data, num_questions, "level", "متوسط", api_key)
-                                time.sleep(2)
+                                time.sleep(12)
                                 q_hard = generate_quiz_with_ai(bytes_data, num_questions, "level", "صعب", api_key)
                                 
                                 st.session_state.quizzes = {
@@ -301,7 +304,15 @@ else:
                             st.session_state.show_review_warning = False
                             st.success("✅ تم توليد الامتحان بنجاح وصياغة الأسئلة والمعادلات!")
                     except Exception as e:
-                        st.error(f"حدث خطأ أثناء التوليد: {e}")
+                        err_message = str(e)
+                        if "429" in err_message or "Quota exceeded" in err_message:
+                            st.error("⚠️ **تم تجاوز الحد المسموح للطلبات في الدقيقة أو اليوم في الباقة المجانية لـ Gemini.**\n\n"
+                                     "💡 **الحل الجذري لتفادي ذلك تماماً:**\n"
+                                     "1. يفضل اختيار **'اختبار واحد (مستوى مخصص)'** أو **'اختبار شامل'** بدلاً من '3 اختبارات دفعة واحدة' لتقليل عدد الطلبات المرسلة.\n"
+                                     "2. الانتظار لمدة دقيقة أو دقيقتين ثم المحاولة مرة أخرى.\n"
+                                     "3. استخدام مفتاح API جديد من Google AI Studio.")
+                        else:
+                            st.error(f"حدث خطأ أثناء التوليد: {e}")
 
         # عرض الامتحانات
         if "quizzes" in st.session_state and st.session_state.quizzes:
