@@ -3,6 +3,8 @@ import json
 import re
 import random
 import time
+import tempfile
+from pathlib import Path
 
 # محاولة استيراد مكتبة قراءة ملفات الـ PDF واستخراج النص منها
 try:
@@ -15,11 +17,12 @@ except ImportError:
     except ImportError:
         PDF_SUPPORT = False
 
-# استيراد مكتبة الذكاء الاصطناعي Gemini
+# مكتبة Gemini الحديثة (Google Gen AI SDK) الداعمة لـ Interactions API
 try:
-    import google.generativeai as genai
+    from google import genai
     GEMINI_SUPPORT = True
 except ImportError:
+    genai = None
     GEMINI_SUPPORT = False
 
 # إعدادات الصفحة
@@ -170,98 +173,90 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة استخراج النص من ملف الـ PDF لتخفيف الحجم تماماً على الـ API
+    # إنشاء عميل Gemini حديث. لا نستخدم google-generativeai القديمة.
+    @st.cache_resource(show_spinner=False)
+    def get_working_gemini_model(key):
+        if not GEMINI_SUPPORT:
+            raise RuntimeError(
+                "مكتبة google-genai غير مثبتة. أضف google-genai إلى requirements.txt ثم أعد نشر التطبيق."
+            )
+        return genai.Client(api_key=key)
+
+    GEMINI_MODEL = "gemini-3.8-flash"
+
+    def _interaction_text(client, prompt, generation_config=None):
+        kwargs = {"model": GEMINI_MODEL, "input": prompt}
+        if generation_config:
+            kwargs["generation_config"] = generation_config
+        result = client.interactions.create(**kwargs)
+        output = getattr(result, "output_text", None)
+        if not output:
+            raise ValueError("لم يُرجع Gemini نصاً؛ قد تكون الاستجابة فارغة أو محجوبة.")
+        return output.strip()
+
+    # استخراج النص من PDF النصي، واستخدام Interactions API للملفات المصورة.
     def extract_text_from_pdf(uploaded_file, api_key=None):
         pdf_bytes = uploaded_file.getvalue()
         text = ""
         try:
-            reader = pypdf.PdfReader(uploaded_file)
-            pages_text = []
-            for page in reader.pages:
-                pages_text.append(page.extract_text() or "")
+            from io import BytesIO
+            reader = pypdf.PdfReader(BytesIO(pdf_bytes))
+            pages_text = [page.extract_text() or "" for page in reader.pages]
             text = "\n".join(pages_text).strip()
         except Exception as e:
             st.warning(f"تعذر استخراج النص بالطريقة التقليدية: {e}")
 
-        # إذا كان النص كافياً فلا نستهلك طلب Gemini إضافياً.
         if len(text) >= 80:
             return text
-
         if not api_key:
-            raise ValueError(
-                "الملف لا يحتوي على نص قابل للاستخراج. أدخل مفتاح Gemini "
-                "لتفعيل قراءة ملفات PDF المصورة تلقائياً."
-            )
+            raise ValueError("الملف لا يحتوي على نص قابل للاستخراج. أدخل مفتاح Gemini لقراءة PDF المصوّر.")
         if len(pdf_bytes) > 20 * 1024 * 1024:
-            raise ValueError(
-                "حجم ملف PDF أكبر من 20 ميجابايت. قلّل حجمه أو قسّمه إلى ملفات أصغر."
-            )
+            raise ValueError("حجم ملف PDF أكبر من 20 ميجابايت. قلّل حجمه أو قسّمه إلى ملفات أصغر.")
 
+        temp_path = None
         try:
-            model = get_working_gemini_model(api_key)
-            st.info(
-                "📷 الملف يبدو ممسوحاً ضوئياً؛ تتم قراءة صفحاته واستخراج "
-                "النصوص والمعادلات تلقائياً..."
-            )
-            response = model.generate_content(
-                [
-                    {"mime_type": "application/pdf", "data": pdf_bytes},
-                    """اقرأ ملف PDF المرفق صفحةً صفحة، واستخرج محتواه التعليمي
-                    بما في ذلك النصوص العربية والإنجليزية والعناوين والتعريفات
-                    والقوانين والمعادلات والجداول والرموز. حافظ على ترتيب الصفحات،
-                    ولا تلخص ولا تخترع نصاً غير واضح. ضع [غير واضح] عند تعذر القراءة.
-                    أعد النص المستخرج فقط مع فاصل واضح بين الصفحات."""
+            client = get_working_gemini_model(api_key)
+            st.info("📷 الملف يبدو ممسوحاً ضوئياً؛ يتم رفعه إلى Gemini وقراءة صفحاته تلقائياً...")
+            # Files API مع Interactions API هو المسار الموصى به للمستندات.
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as temp_file:
+                temp_file.write(pdf_bytes)
+                temp_path = temp_file.name
+
+            uploaded = client.files.upload(file=Path(temp_path))
+            file_info = uploaded
+            # انتظر اكتمال معالجة الملف قبل بدء التفاعل.
+            for _ in range(30):
+                state = str(getattr(file_info, "state", "")).upper()
+                if "ACTIVE" in state or not state:
+                    break
+                if "FAILED" in state:
+                    raise RuntimeError("فشل Gemini في معالجة ملف PDF المرفوع.")
+                time.sleep(2)
+                file_info = client.files.get(name=uploaded.name)
+
+            prompt = """اقرأ ملف PDF المرفق صفحةً صفحة، واستخرج محتواه التعليمي بما في ذلك النصوص العربية والإنجليزية والعناوين والتعريفات والقوانين والمعادلات والجداول والرموز. حافظ على ترتيب الصفحات، ولا تلخص ولا تخترع نصاً غير واضح. ضع [غير واضح] عند تعذر القراءة. أعد النص المستخرج فقط مع فاصل واضح بين الصفحات."""
+            interaction = client.interactions.create(
+                model=GEMINI_MODEL,
+                input=[
+                    {"type": "document", "uri": uploaded.uri, "mime_type": "application/pdf"},
+                    {"type": "text", "text": prompt},
                 ],
-                generation_config={"temperature": 0.1},
-                request_options={"timeout": 240},
             )
-            scanned_text = (getattr(response, "text", None) or "").strip()
+            scanned_text = (getattr(interaction, "output_text", None) or "").strip()
             if len(scanned_text) < 40:
                 raise ValueError("لم يتمكن Gemini من قراءة نص كافٍ من صفحات الملف.")
             return scanned_text
         except Exception as e:
             raise RuntimeError(
-                "تعذرت قراءة ملف PDF المصوّر تلقائياً. تأكد من دعم نموذج Gemini "
-                "لإدخال PDF ومن أن الملف واضح وحجمه مناسب. التفاصيل: " + str(e)
+                "تعذرت قراءة ملف PDF المصوّر عبر Gemini 3.8 Flash. "
+                "تحقق من صلاحية المفتاح واتصال API ووضوح الملف. التفاصيل: " + str(e)
             ) from e
-
-    # اختيار نموذج متاح وتصفية أي نماذج قديمة قد تسبب خطأ 404
-    @st.cache_resource(show_spinner=False)
-    def get_working_gemini_model(key):
-        genai.configure(api_key=key)
-        preferred = [
-            "gemini-3.8-flash",
-            "gemini-2.0-flash",
-            "gemini-1.5-flash",
-        ]
-        available = []
-        try:
-            for item in genai.list_models():
-                methods = getattr(item, "supported_generation_methods", []) or []
-                if "generateContent" in methods:
-                    name = item.name.replace("models/", "")
-                    # استبعاد النماذج غير المدعومة أو القديمة لمنع أخطاء 404
-                    if "2.5-flash" in name:
-                        continue
-                    available.append(name)
-        except Exception:
-            available = preferred[:]
-
-        ordered = [name for name in preferred if name in available]
-        ordered += [name for name in available if name not in ordered]
-        if not ordered:
-            ordered = preferred[:]
-
-        last_error = None
-        for model_name in ordered:
-            try:
-                test_model = genai.GenerativeModel(model_name)
-                return test_model
-            except Exception as exc:
-                last_error = exc
-        raise RuntimeError(
-            "تعذر تهيئة نموذج Gemini. تأكد من تفعيل Gemini API وأن المفتاح صالح."
-        ) from last_error
+        finally:
+            if temp_path:
+                try:
+                    Path(temp_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     def _extract_json_payload(raw_text):
         if not raw_text:
@@ -272,6 +267,7 @@ else:
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError:
+            # استخراج أول كائن أو مصفوفة JSON كاملة عند وجود نص زائد.
             decoder = json.JSONDecoder()
             for pos, char in enumerate(cleaned):
                 if char in "[{":
@@ -303,6 +299,7 @@ else:
             if len(options) < 2:
                 continue
             answer = str(answer).strip()
+            # توحيد الإجابة مع الاختيارات لتفادي فشل التصحيح بسبب اختلاف مسافات بسيطة.
             matched = next((option for option in options if option.strip() == answer), None)
             if matched is None:
                 matched = next((option for option in options
@@ -339,6 +336,7 @@ else:
 
     def _retry_delay(exc, attempt):
         message = str(exc)
+        # التقاط مدة الانتظار إن أرسلها الخادم (مثل retry in 32.4s).
         match = re.search(r"(?:retry|wait)[^0-9]{0,30}(\d+(?:\.\d+)?)\s*s", message, re.I)
         if match:
             return min(max(float(match.group(1)) + 2, 5), 90)
@@ -348,17 +346,11 @@ else:
         max_attempts = 3
         for attempt in range(max_attempts):
             try:
-                response = model.generate_content(
+                raw = _interaction_text(
+                    model,
                     prompt,
-                    generation_config={
-                        "response_mime_type": "application/json",
-                        "temperature": 0.7,
-                    },
-                    request_options={"timeout": 180},
+                    generation_config={"response_mime_type": "application/json"},
                 )
-                raw = getattr(response, "text", None)
-                if not raw:
-                    raise ValueError("لم يُرجع Gemini نصاً؛ قد تكون الاستجابة محجوبة أو فارغة.")
                 return _extract_json_payload(raw)
             except Exception as exc:
                 if (attempt == max_attempts - 1
@@ -373,6 +365,7 @@ else:
                 time.sleep(delay)
         raise RuntimeError("تعذر إكمال الطلب بعد عدة محاولات.")
 
+    # توليد اختبار واحد أو الاختبارات الثلاثة في استدعاء واحد لتقليل استهلاك RPM.
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         if not pdf_text or not pdf_text.strip():
             raise ValueError(
@@ -439,6 +432,7 @@ else:
         if isinstance(payload, dict):
             questions = payload.get("questions") or payload.get("laws") or payload.get("data")
             if questions is None:
+                # دعم استجابة قائمة داخل مفتاح واحد غير متوقع.
                 questions = next((v for v in payload.values() if isinstance(v, list)), None)
         else:
             questions = payload
@@ -471,6 +465,7 @@ else:
                                 )
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
+                                # طلب واحد فقط يحتوي على المستويات الثلاثة لتقليل استهلاك الحصة.
                                 st.session_state.quizzes = generate_quiz_with_ai(
                                     pdf_text_data, int(num_questions), "triple", None, api_key
                                 )
@@ -551,6 +546,7 @@ else:
                         )
                         user_answers[i] = None if selected_opt == "-- اختر إجابة --" else selected_opt
                         
+                        # العلامة المائية المحصورة في كارت الامتحان فقط
                         st.markdown("<div class='exam-watermark'>محمد عبدالله - Mohamed Abdallah</div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -640,8 +636,7 @@ else:
                             سؤال الطالب: {user_query}
                             """
                             
-                            chat_response = model.generate_content(chat_prompt)
-                            ans_text = chat_response.text
+                            ans_text = _interaction_text(model, chat_prompt)
                             
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
                             st.rerun()
