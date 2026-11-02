@@ -204,7 +204,7 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini مع تحديد الهيكل بوضوح لضمان تطابق المفاتيح
+    # دالة التوليد التفاعلي عبر Gemini مع نظام تبريد (Rate Limit Handler) قوي ومطوّر
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
         random_seed = random.randint(1000, 999999)
@@ -221,7 +221,7 @@ else:
         أنت خبير واضع امتحانات الثانوية العامة المصرية والجامعات.
         قم بقراءة النص المستخرج من المنهج بدقة:
         ---
-        {pdf_text[:12000]}
+        {pdf_text[:10000]}
         ---
         أنشئ {count} أسئلة اختيارات من متعدد (MCQ) جديدة تماماً وفريدة (معرف التوليد: {random_seed}).
         تفاصيل التوليد: {prompt_details}
@@ -243,8 +243,8 @@ else:
         ]
         """
 
-        max_retries = 3
-        delay = 8
+        max_retries = 4
+        base_delay = 10  # فترة انتظار ذكية تبدأ بـ 10 ثوانٍ وتتضاعف عند الحاجة
 
         for attempt in range(max_retries):
             try:
@@ -259,24 +259,23 @@ else:
                     clean_json_str = raw_text.replace("```json", "").replace("```", "").strip()
                     
                 parsed_data = json.loads(clean_json_str)
-                # التأكد من صحة البيانات وأنها قائمة
                 if isinstance(parsed_data, list):
                     return parsed_data
                 elif isinstance(parsed_data, dict):
-                    # البحث عن أول مفتاح يحتوي على قائمة في حال تم إرجاع الكائن داخل كود مغلف
                     for val in parsed_data.values():
                         if isinstance(val, list):
                             return val
                 raise Exception("البيانات المسترجعة ليست قائمة صالحة للأسئلة.")
             except Exception as e:
                 err_str = str(e)
-                if "429" in err_str or "Quota exceeded" in err_str:
+                if "429" in err_str or "Quota exceeded" in err_str or "ResourceExhausted" in err_str:
                     if attempt < max_retries - 1:
-                        time.sleep(delay * (attempt + 1))
+                        sleep_time = base_delay * (2 ** attempt)
+                        time.sleep(sleep_time)
                         continue
                 if attempt == max_retries - 1:
                     raise e
-                time.sleep(2)
+                time.sleep(3)
 
     # --- تبويب الاختبارات والتحليل ---
     with tab_exam:
@@ -291,7 +290,7 @@ else:
             else:
                 if st.button("✨ إرسال وإنشاء أسئلة اختبار جديدة"):
                     try:
-                        with st.spinner("جاري استخراج النصوص وتحليل المحتوى بالذكاء الاصطناعي..."):
+                        with st.spinner("جاري استخراج النصوص وتحليل المحتوى بالذكاء الاصطناعي (يتم مراعاة فترات التبريد لتفادي قيود الـ API)..."):
                             pdf_text_data = extract_text_from_pdf(uploaded_file)
                             st.session_state.pdf_text = pdf_text_data
                             
@@ -299,10 +298,11 @@ else:
                             st.session_state.unlocked_hints = set()
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
+                                # زيادة زمن التوقف بين الاختبارات الثلاثة إلى 8 ثوانٍ لتجنب حظر الـ RPM
                                 q_easy = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "سهل", api_key)
-                                time.sleep(5)
+                                time.sleep(8)
                                 q_med = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "متوسط", api_key)
-                                time.sleep(5)
+                                time.sleep(8)
                                 q_hard = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "صعب", api_key)
                                 
                                 st.session_state.quizzes = {
@@ -328,9 +328,10 @@ else:
                             st.success("✅ تم توليد الامتحان بنجاح وصياغة الأسئلة والمعادلات!")
                     except Exception as e:
                         err_message = str(e)
-                        if "429" in err_message or "Quota exceeded" in err_message:
-                            st.error("⚠️ **تم استنفاد حدود الطلبات المؤقتة (Rate Limit).**\n\n"
-                                     "💡 **نصيحة هامة:** اختر **'اختبار واحد (مستوى مخصص)'** أو انتظر دقيقة ثم حاول مرة أخرى.")
+                        if "429" in err_message or "Quota exceeded" in err_message or "ResourceExhausted" in err_message:
+                            st.error("⚠️ **تم استنفاد حدود الطلبات المؤقتة (Rate Limit) رغم صحة المفتاح.**\n\n"
+                                     "💡 **السبب:** الباقات المجانية لـ Gemini تفرض حد أقصى لعدد الطلبات في الدقيقة الواحدة (RPM). طلب 3 اختبارات دفعة واحدة يستهلك هذه الحصة فوراً.\n"
+                                     "🛠️ **الحل الفوري:** اختر من القائمة الجانبية **'اختبار واحد (مستوى مخصص)'** أو **'اختبار شامل'**، أو انتظر لمدة دقيقة واحدة ثم جرب مرة أخرى.")
                         else:
                             st.error(f"حدث خطأ أثناء التوليد: {e}")
 
@@ -354,7 +355,6 @@ else:
 
                     user_answers = {}
                     for i, q_item in enumerate(quiz_data):
-                        # معالجة آمنة لاستخراج نص السؤال بغض النظر عن اسم المفتاح
                         question_text = q_item.get('q') or q_item.get('question') or q_item.get('question_text') or f"السؤال رقم {i+1} (تعذر العثور على النص)"
                         
                         st.markdown(f"<div class='bright-card'>", unsafe_allow_html=True)
