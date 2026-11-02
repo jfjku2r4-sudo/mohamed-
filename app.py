@@ -28,7 +28,7 @@ except ImportError:
 
 # إعداد كلمة مرور الدخول
 # يمكنك وضع APP_PASSWORD في Streamlit Secrets
-APP_PASSWORD = st.secrets.get("APP_PASSWORD", "CHANGE_THIS_PASSWORD")
+APP_PASSWORD = st.secrets.get("APP_PASSWORD", "01224982634")
 
 # إعدادات الصفحة
 st.set_page_config(
