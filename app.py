@@ -30,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تصميم الواجهة بـ CSS خلفية مدمجة بين الأزرق والأسود بدون علامات مائية عامة
+# تصميم الواجهة بـ CSS يدعم الوضعين الفاتح والغامق تلقائياً بمرونة تامة
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
@@ -39,20 +39,9 @@ st.markdown("""
         font-family: 'Cairo', sans-serif;
     }
 
-    /* خلفية داكنة مدمجة بين الأزرق والأسود للمنصة والقائمة الجانبية */
-    .stAppViewContainer, [data-testid="stSidebar"] {
-        background: linear-gradient(135deg, #090d16 0%, #0b1e36 50%, #050b14 100%) !important;
-        color: #f1f5f9;
-    }
-
-    /* تحسين النصوص والشريط الجانبي */
-    [data-testid="stSidebar"] * {
-        color: #e2e8f0 !important;
-    }
-
     .main-header {
         font-size: 2.6rem;
-        background: linear-gradient(135deg, #38bdf8, #60a5fa, #818cf8);
+        background: linear-gradient(135deg, #2563eb, #7c3aed, #db2777);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         text-align: center;
@@ -62,32 +51,27 @@ st.markdown("""
 
     .sub-header {
         font-size: 1.15rem;
-        color: #94a3b8;
         text-align: center;
         margin-bottom: 25px;
         font-weight: 600;
     }
 
-    /* كروت الامتحانات بتصميم زجاجي داكن ورائع */
+    /* كروت الامتحانات بتصميم متكيف ديناميكياً مع الوضع الفاتح والغامق */
     .bright-card {
-        background: rgba(15, 23, 42, 0.75);
-        backdrop-filter: blur(12px);
         padding: 25px;
         border-radius: 18px;
-        border: 1px solid rgba(56, 189, 248, 0.2);
-        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+        border: 2px solid rgba(59, 130, 246, 0.2);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
         margin-bottom: 25px;
         position: relative;
-        color: #f8fafc;
     }
 
-    /* العلامة المائية المحصورة فقط داخل الامتحانات */
+    /* العلامة المائية المحصورة فقط داخل كارت الامتحان */
     .exam-watermark {
         position: absolute;
         right: 15px;
         bottom: 10px;
         font-size: 0.75rem;
-        color: #38bdf8;
         opacity: 0.6;
         font-weight: bold;
         pointer-events: none;
@@ -95,10 +79,9 @@ st.markdown("""
 
     .footer {
         text-align: center;
-        color: #64748b;
         margin-top: 40px;
         font-size: 1rem;
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 1px solid rgba(128, 128, 128, 0.2);
         padding-top: 20px;
         font-weight: 700;
     }
@@ -179,7 +162,7 @@ else:
             st.session_state.username = ""
             st.rerun()
             
-        st.markdown("<div style='text-align: center; color: #64748b; margin-top: 20px; font-size:0.85rem;'><b>منصة الامتحانات الذكية</b><br>تطوير: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; margin-top: 20px; font-size:0.85rem;'><b>منصة الامتحانات الذكية</b><br>تطوير: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
 
     # --- العنوان الرئيسي ---
     st.markdown("<div class='main-header'>🎓 منصة الامتحانات والتحليل الذكي</div>", unsafe_allow_html=True)
@@ -187,10 +170,11 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة اختيار النموذج المدعوم
+    # دالة اختيار النموذج السريع والمدعوم لضمان استجابة فورية
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
-        fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
+        # إعطاء الأولوية للنماذج السريعة لضمان الرد السريع
+        fallback_models = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-3.8-flash', 'gemini-1.5-pro', 'gemini-pro']
         
         for f_model in fallback_models:
             try:
@@ -247,7 +231,7 @@ else:
         """
 
         max_retries = 3
-        delay = 8
+        delay = 6
 
         for attempt in range(max_retries):
             try:
@@ -282,7 +266,7 @@ else:
             else:
                 if st.button("✨ إرسال وإنشاء أسئلة اختبار جديدة"):
                     try:
-                        with st.spinner("جاري تحليل المحتوى وتوليد الأسئلة والمعادلات بالذكاء الاصطناعي..."):
+                        with st.spinner("جاري تحليل المحتوى وتوليد الأسئلة والمعادلات بالذكاء الاصطناعي بسرعة..."):
                             bytes_data = uploaded_file.getvalue()
                             st.session_state.pdf_bytes = bytes_data
                             
@@ -291,9 +275,9 @@ else:
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
                                 q_easy = generate_quiz_with_ai(bytes_data, num_questions, "level", "سهل", api_key)
-                                time.sleep(3)
+                                time.sleep(2)
                                 q_med = generate_quiz_with_ai(bytes_data, num_questions, "level", "متوسط", api_key)
-                                time.sleep(3)
+                                time.sleep(2)
                                 q_hard = generate_quiz_with_ai(bytes_data, num_questions, "level", "صعب", api_key)
                                 
                                 st.session_state.quizzes = {
@@ -440,7 +424,7 @@ else:
                 submit_chat = st.form_submit_button("إرسال السؤال 🚀")
 
                 if submit_chat and user_query.strip():
-                    with st.spinner("جاري التحليل والإجابة..."):
+                    with st.spinner("جاري التحليل والإجابة بسرعة..."):
                         try:
                             model = get_working_gemini_model(api_key)
                             pdf_part = {"mime_type": "application/pdf", "data": st.session_state.pdf_bytes}
