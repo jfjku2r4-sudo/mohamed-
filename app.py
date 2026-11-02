@@ -40,7 +40,7 @@ st.markdown("""
     }
 
     .main-header {
-        font-size: 2.6rem;
+        font-size: 2.5rem;
         background: linear-gradient(135deg, #2563eb, #7c3aed, #db2777);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
@@ -183,7 +183,7 @@ else:
             st.error(f"خطأ في قراءة ملف الـ PDF: {e}")
         return text
 
-    # دالة اختيار النموذج المحدثة لتدعم gemini-3.8-flash كخيار أول رئيسي
+    # دالة اختيار النموذج المدعوم والحديث مع Fallbacks آمنة
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
         fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-pro']
@@ -245,7 +245,7 @@ else:
         """
 
         max_retries = 3
-        delay = 10
+        delay = 8
 
         for attempt in range(max_retries):
             try:
@@ -289,9 +289,9 @@ else:
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
                                 q_easy = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "سهل", api_key)
-                                time.sleep(6)
+                                time.sleep(5)
                                 q_med = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "متوسط", api_key)
-                                time.sleep(6)
+                                time.sleep(5)
                                 q_hard = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "صعب", api_key)
                                 
                                 st.session_state.quizzes = {
