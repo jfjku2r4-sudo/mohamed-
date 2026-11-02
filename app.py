@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import re
 import random
+import time
 
 # محاولة استيراد مكتبة قراءة ملفات الـ PDF
 try:
@@ -29,7 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# تصميم الواجهة بـ CSS والتصاميم الزاهية مع العلامات المائية
+# تصميم الواجهة بـ CSS خلفية مدمجة بين الأزرق والأسود بدون علامات مائية عامة
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
@@ -38,37 +39,20 @@ st.markdown("""
         font-family: 'Cairo', sans-serif;
     }
 
-    /* العلامة المائية للستارة والخلفية العامة */
-    .stAppViewContainer {
-        background-color: #f4f7fe;
-        background-image: radial-gradient(#3b82f6 0.5px, transparent 0.5px), radial-gradient(#ec4899 0.5px, #f4f7fe 0.5px);
-        background-size: 20px 20px;
-        background-position: 0 0,10px 10px;
+    /* خلفية داكنة مدمجة بين الأزرق والأسود للمنصة والقائمة الجانبية */
+    .stAppViewContainer, [data-testid="stSidebar"] {
+        background: linear-gradient(135deg, #090d16 0%, #0b1e36 50%, #050b14 100%) !important;
+        color: #f1f5f9;
     }
 
-    /* علامة مائية عائمة متكررة */
-    .watermark-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100vw;
-        height: 100vh;
-        pointer-events: none;
-        z-index: 9999;
-        opacity: 0.04;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: space-around;
-        align-content: space-around;
-        font-size: 2rem;
-        font-weight: 900;
-        color: #000;
-        user-select: none;
+    /* تحسين النصوص والشريط الجانبي */
+    [data-testid="stSidebar"] * {
+        color: #e2e8f0 !important;
     }
 
     .main-header {
         font-size: 2.6rem;
-        background: linear-gradient(135deg, #2563eb, #7c3aed, #db2777);
+        background: linear-gradient(135deg, #38bdf8, #60a5fa, #818cf8);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         text-align: center;
@@ -76,69 +60,49 @@ st.markdown("""
         margin-bottom: 5px;
     }
 
-    .watermark-badge {
-        display: inline-block;
-        background: linear-gradient(90deg, #ec4899, #8b5cf6);
-        color: white;
-        padding: 4px 15px;
-        border-radius: 20px;
-        font-size: 0.85rem;
-        font-weight: bold;
-        letter-spacing: 1px;
-        box-shadow: 0 4px 10px rgba(236, 72, 153, 0.3);
-        margin-bottom: 15px;
-    }
-
     .sub-header {
         font-size: 1.15rem;
-        color: #4b5563;
+        color: #94a3b8;
         text-align: center;
         margin-bottom: 25px;
         font-weight: 600;
     }
 
-    /* كروت زاهية */
+    /* كروت الامتحانات بتصميم زجاجي داكن ورائع */
     .bright-card {
-        background: rgba(255, 255, 255, 0.95);
-        backdrop-filter: blur(10px);
+        background: rgba(15, 23, 42, 0.75);
+        backdrop-filter: blur(12px);
         padding: 25px;
         border-radius: 18px;
-        border: 2px solid #e0e7ff;
-        box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.1), 0 8px 10px -6px rgba(59, 130, 246, 0.1);
+        border: 1px solid rgba(56, 189, 248, 0.2);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
         margin-bottom: 25px;
         position: relative;
+        color: #f8fafc;
     }
 
-    /* علامة مائية داخل الامتحان */
+    /* العلامة المائية المحصورة فقط داخل الامتحانات */
     .exam-watermark {
         position: absolute;
         right: 15px;
         bottom: 10px;
         font-size: 0.75rem;
-        color: #94a3b8;
+        color: #38bdf8;
+        opacity: 0.6;
         font-weight: bold;
         pointer-events: none;
     }
 
     .footer {
         text-align: center;
-        color: #4b5563;
+        color: #64748b;
         margin-top: 40px;
         font-size: 1rem;
-        border-top: 2px solid #e2e8f0;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
         padding-top: 20px;
         font-weight: 700;
     }
     </style>
-
-    <div class="watermark-overlay">
-        <span>محمد عبدالله - Mohamed Abdallah</span>
-        <span>محمد عبدالله - Mohamed Abdallah</span>
-        <span>محمد عبدالله - Mohamed Abdallah</span>
-        <span>محمد عبدالله - Mohamed Abdallah</span>
-        <span>محمد عبدالله - Mohamed Abdallah</span>
-        <span>محمد عبدالله - Mohamed Abdallah</span>
-    </div>
 """, unsafe_allow_html=True)
 
 # إدارة حالة الجلسة والتسجيل
@@ -156,7 +120,6 @@ if "unlocked_hints" not in st.session_state:
 # --- صفحة تسجيل الدخول ---
 if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("<div style='text-align: center;'><span class='watermark-badge'>✨ Mohamed Abdallah Platform ✨</span></div>", unsafe_allow_html=True)
     st.markdown("<div class='main-header'>🔐 بوابة الدخول للمنصة الذكية</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-header'>قم بتسجيل الدخول للوصول لكافة الامتحانات والشات الذكي وتحليل الملفات والقوانين</div>", unsafe_allow_html=True)
     
@@ -179,7 +142,6 @@ if not st.session_state.logged_in:
                     st.error("❌ كلمة المرور غير صحيحة.")
                 else:
                     st.warning("⚠️ يرجى كتابة اسمك الثلاثي أولاً.")
-        st.markdown("<div style='text-align:center; margin-top:15px; font-size:0.85rem; color:#64748b;'>العلامة المائية المحمية: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
                     
     st.markdown("<div class='footer'>حقوق الملكية والتطوير محفوظة © <b>محمد عبدالله - Mohamed Abdallah</b> 💻</div>", unsafe_allow_html=True)
@@ -189,7 +151,6 @@ else:
     with st.sidebar:
         st.image("https://img.icons8.com/clouds/200/graduation-cap.png", width=100)
         st.markdown(f"### 👤 الطالب: **{st.session_state.username}**")
-        st.markdown("<span style='color:#8b5cf6; font-weight:bold;'>علامة مائية: محمد عبدالله</span>", unsafe_allow_html=True)
         st.markdown("---")
         
         st.header("⚙️ إعدادات النموذج والاختبار")
@@ -220,18 +181,15 @@ else:
             
         st.markdown("<div style='text-align: center; color: #64748b; margin-top: 20px; font-size:0.85rem;'><b>منصة الامتحانات الذكية</b><br>تطوير: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
 
-    # --- شريط العلامة المائية العلوية ---
-    st.markdown("<div style='text-align: center;'><span class='watermark-badge'>علامة مائية موثقة: محمد عبدالله - Mohamed Abdallah</span></div>", unsafe_allow_html=True)
+    # --- العنوان الرئيسي ---
     st.markdown("<div class='main-header'>🎓 منصة الامتحانات والتحليل الذكي</div>", unsafe_allow_html=True)
 
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة ذكية ومحدثة تلقائياً لاختيار أحدث النماذج المتاحة وتجنب أي أخطاء
+    # دالة اختيار النموذج المدعوم
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
-        
-        # قائمة النماذج المحدثة وتشمل النموذج المطلوب حديثاً
         fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']
         
         for f_model in fallback_models:
@@ -241,7 +199,6 @@ else:
             except Exception:
                 continue
                 
-        # محاولة البحث التلقائي المباشر عن أول نموذج متاح يدعم توليد المحتوى
         try:
             for m in genai.list_models():
                 if 'generateContent' in m.supported_generation_methods:
@@ -251,13 +208,10 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini
+    # دالة التوليد التفاعلي عبر Gemini مع دعم إعادة المحاولة
     def generate_quiz_with_ai(pdf_bytes, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
-
         pdf_file_part = {"mime_type": "application/pdf", "data": pdf_bytes}
-
-        # توليد رقم عشوائي لضمان أسئلة جديدة دائماً
         random_seed = random.randint(1000, 999999)
 
         prompt_details = ""
@@ -292,16 +246,28 @@ else:
         ]
         """
 
-        response = model.generate_content([pdf_file_part, prompt])
-        raw_text = response.text.strip()
-        
-        match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
-        if match:
-            clean_json_str = match.group(0)
-        else:
-            clean_json_str = raw_text.replace("```json", "").replace("```", "").strip()
-            
-        return json.loads(clean_json_str)
+        max_retries = 3
+        delay = 8
+
+        for attempt in range(max_retries):
+            try:
+                response = model.generate_content([pdf_file_part, prompt])
+                raw_text = response.text.strip()
+                
+                match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
+                if match:
+                    clean_json_str = match.group(0)
+                else:
+                    clean_json_str = raw_text.replace("```json", "").replace("```", "").strip()
+                    
+                return json.loads(clean_json_str)
+            except Exception as e:
+                err_str = str(e)
+                if "429" in err_str or "Quota exceeded" in err_str:
+                    if attempt < max_retries - 1:
+                        time.sleep(delay)
+                        continue
+                raise e
 
     # --- تبويب الاختبارات والتحليل ---
     with tab_exam:
@@ -320,15 +286,20 @@ else:
                             bytes_data = uploaded_file.getvalue()
                             st.session_state.pdf_bytes = bytes_data
                             
-                            # إعادة ضبط فرص التلميحات
                             st.session_state.hints_used = 0
                             st.session_state.unlocked_hints = set()
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
+                                q_easy = generate_quiz_with_ai(bytes_data, num_questions, "level", "سهل", api_key)
+                                time.sleep(3)
+                                q_med = generate_quiz_with_ai(bytes_data, num_questions, "level", "متوسط", api_key)
+                                time.sleep(3)
+                                q_hard = generate_quiz_with_ai(bytes_data, num_questions, "level", "صعب", api_key)
+                                
                                 st.session_state.quizzes = {
-                                    "سهل": generate_quiz_with_ai(bytes_data, num_questions, "level", "سهل", api_key),
-                                    "متوسط": generate_quiz_with_ai(bytes_data, num_questions, "level", "متوسط", api_key),
-                                    "صعب": generate_quiz_with_ai(bytes_data, num_questions, "level", "صعب", api_key)
+                                    "سهل": q_easy,
+                                    "متوسط": q_med,
+                                    "صعب": q_hard
                                 }
                             elif exam_type == "🚀 اختبار شامل للمادة":
                                 st.session_state.quizzes = {
@@ -338,7 +309,7 @@ else:
                                 st.session_state.quizzes = {
                                     "اختبار القوانين والتطبيقات": generate_quiz_with_ai(bytes_data, num_questions, "laws", None, api_key)
                                 }
-                            else: # اختبار واحد بمستوى مخصص
+                            else:
                                 st.session_state.quizzes = {
                                     f"اختبار ({selected_single_level})": generate_quiz_with_ai(bytes_data, num_questions, "level", selected_single_level, api_key)
                                 }
@@ -371,7 +342,7 @@ else:
                     for i, q_item in enumerate(quiz_data):
                         st.markdown(f"<div class='bright-card'>", unsafe_allow_html=True)
                         st.markdown(f"##### ❓ السؤال {i+1}:")
-                        st.write(q_item['q']) # دعم معادلات latex
+                        st.write(q_item['q'])
                         
                         hint_key = f"{current_key}_{i}"
                         show_hint_btn = st.checkbox(f"💡 إظهار التلميحة (تستهلك 1 من الفرص)", key=f"chk_hint_{hint_key}")
@@ -394,6 +365,7 @@ else:
                         )
                         user_answers[i] = None if selected_opt == "-- اختر إجابة --" else selected_opt
                         
+                        # العلامة المائية المحصورة في كارت الامتحان فقط
                         st.markdown("<div class='exam-watermark'>محمد عبدالله - Mohamed Abdallah</div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -402,7 +374,6 @@ else:
                         st.session_state.temp_user_answers = user_answers
                         st.session_state.show_review_warning = True
 
-            # التنبيه والمراجعة قبل التسليم
             if st.session_state.get("show_review_warning", False):
                 st.warning("⚠️ عزيزي الطالب: راجع إجاباتك جيداً للتحقق قبل تسليم الاختبار بشكل نهائي!")
                 c_btn1, c_btn2 = st.columns(2)
@@ -418,7 +389,6 @@ else:
                         st.session_state.show_review_warning = False
                         st.rerun()
 
-            # عرض النتيجة
             if st.session_state.get("submitted_quiz", False):
                 active_key = st.session_state.submitted_level
                 quiz = st.session_state.quizzes[active_key]
@@ -451,7 +421,7 @@ else:
                     st.success("🎉 أداء ممتاز وشامل! استمر في هذا التفوق.")
                 st.markdown("</div>", unsafe_allow_html=True)
 
-    # --- تبويب الشات الذكي والتحليل التفاعلي المتوافق مع الإصدارات القديمة ---
+    # --- تبويب الشات الذكي والتحليل التفاعلي ---
     with tab_chat:
         st.markdown("<div class='sub-header'>تحدث مع الذكاء الاصطناعي لتحليل أي جزء من المادة أو طرح الأسئلة والقوانين والمعادلات</div>", unsafe_allow_html=True)
 
@@ -460,13 +430,11 @@ else:
         elif not api_key:
             st.warning("⚠️ يرجى إدخال مفتاح Gemini API Key في القائمة الجانبية لتفعيل الشات.")
         else:
-            # عرض سجل المحادثة السابق
             for chat in st.session_state.chat_history:
                 st.markdown(f"**👤 أنت:** {chat['user']}")
                 st.markdown(f"**🤖 المساعد الذكي:** {chat['assistant']}")
                 st.markdown("---")
 
-            # نموذج إدخال متوافق مع كافة إصدارات Streamlit
             with st.form(key="chat_form", clear_on_submit=True):
                 user_query = st.text_input("اسأل الذكاء الاصطناعي عن أي جزء في المادة، القوانين، أو المسائل...")
                 submit_chat = st.form_submit_button("إرسال السؤال 🚀")
@@ -487,7 +455,6 @@ else:
                             chat_response = model.generate_content([pdf_part, chat_prompt])
                             ans_text = chat_response.text
                             
-                            # حفظ المحادثة في الذاكرة
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
                             st.rerun()
                         except Exception as e:
