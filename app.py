@@ -143,6 +143,19 @@ else:
         st.header("⚙️ إعدادات النموذج والاختبار")
         st.caption("⚡ وضع الاستجابة السريعة مفعّل")
         api_key = st.text_input("🔑 مفتاح Gemini API Key:", type="password", help="أدخل مفتاح Google Gemini API")
+
+        model_choices = {
+            "⚡ Gemini 3.5 Flash-Lite — الأسرع للردود والاختبارات": "gemini-3.5-flash-lite",
+            "🚀 Gemini 3.1 Flash-Lite — سريع واقتصادي": "gemini-3.1-flash-lite",
+            "⚖️ Gemini 3.6 Flash — توازن بين السرعة والجودة": "gemini-3.6-flash",
+            "🧠 Gemini 3.8 Flash — جودة أعلى للمهام المعقدة": "gemini-3.8-flash",
+        }
+        selected_model_label = st.selectbox(
+            "🤖 اختر نموذج الذكاء الاصطناعي (الأسرع أولاً):",
+            options=list(model_choices.keys()),
+            index=0,
+            help="يبدأ الاختيار تلقائياً بأسرع نموذج. يمكنك اختيار نموذج أقوى عند الحاجة."
+        )
         
         exam_type = st.radio(
             "📋 نوع إنشاء الاختبار:",
@@ -184,7 +197,7 @@ else:
             )
         return genai.Client(api_key=key)
 
-    GEMINI_MODEL = "gemini-3.8-flash"
+    # النموذج المختار من القائمة الجانبية؛ الافتراضي هو الأسرع.\n    GEMINI_MODEL = model_choices[selected_model_label]
     FAST_GENERATION_CONFIG = {"thinking_level": "low"}
 
     def _interaction_text(client, prompt, generation_config=None, max_output_tokens=2048):
