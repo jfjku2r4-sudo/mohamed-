@@ -153,7 +153,7 @@ else:
         if exam_type == "🎯 اختبار واحد (مستوى مخصص)":
             selected_single_level = st.selectbox("اختر مستوى الاختبار:", ["سهل", "متوسط", "صعب"])
 
-        num_questions = st.number_input("🔢 عدد الأسئلة:", min_value=3, max_value=50, value=10, step=1)
+        num_questions = st.number_input("🔢 عدد الأسئلة لكل مستوى:", min_value=3, max_value=25, value=10, step=1)
         max_hints = st.number_input("💡 عدد فرص التلميحات المتاحة:", min_value=0, max_value=10, value=3, step=1)
         
         st.markdown("---")
@@ -170,7 +170,7 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة استخراج النص من ملف الـ PDF لتخفيف الحجم تماماً على الـ API
+    # دالة استخراج النص من ملف الـ PDF
     def extract_text_from_pdf(uploaded_file):
         text = ""
         try:
@@ -183,7 +183,7 @@ else:
             st.error(f"خطأ في قراءة ملف الـ PDF: {e}")
         return text
 
-    # دالة اختيار النموذج المدعوم والحديث مع Fallbacks آمنة
+    # دالة اختيار النموذج المدعوم والحديث
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
         fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-pro']
@@ -204,8 +204,8 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini مع نظام تبريد (Rate Limit Handler) قوي ومطوّر
-    def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
+    # دالة توليد اختبار فردي أو قوانين
+    def generate_single_quiz(pdf_text, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
         random_seed = random.randint(1000, 999999)
 
@@ -223,59 +223,82 @@ else:
         ---
         {pdf_text[:10000]}
         ---
-        أنشئ {count} أسئلة اختيارات من متعدد (MCQ) جديدة تماماً وفريدة (معرف التوليد: {random_seed}).
-        تفاصيل التوليد: {prompt_details}
+        أنشئ {count} أسئلة اختيارات من متعدد (MCQ) جديدة وفريدة (معرف التوليد: {random_seed}).
+        التفاصيل: {prompt_details}
 
-        شروط ومعايير التنسيق الصارمة:
-        1. إذا كانت المادة تحتوي على معادلات رياضية أو كيميائية أو فيزيائية، اكتبها بنص LaTeX واضح بين علامتي $ (مثال: $E = mc^2$ أو $\\int_{{0}}^{{\\infty}} f(x)dx$).
-        2. الإجابات يجب أن تكون واضحة ومحددة.
-        3. لكل سؤال أضف تلميحاً مساعداً (hint) لا يكشف الحل مباشرة.
-        4. أضف شرحاً تفصيلياً ممتازاً لسبب الإجابة الصحيحة.
-        5. يجب أن تكون الاستجابة بصيغة JSON صحيحة ومتوافقة تماماً مع المعيار التالي (Array of Objects) بدون أي نصوص أو تعليقات خارجية:
+        شروط ومعايير التنسيق:
+        1. معادلات LaTeX بين علامتي $ (مثال: $E = mc^2$).
+        2. تلميح (hint) ذكي لكل سؤال.
+        3. شرح تفصيلي (explanation) للإجابة.
+        4. الاستجابة بصيغة JSON حصرياً (Array of Objects):
         [
           {{
-            "q": "نص السؤال هنا",
-            "options": ["أ) الاختيار الأول", "ب) الاختيار الثاني", "ج) الاختيار الثالث", "د) الاختيار الرابع"],
-            "answer": "أ) الاختيار الأول",
-            "hint": "تلميح ذكي للحل",
-            "explanation": "الشرح التفصيلي للحل"
+            "q": "نص السؤال",
+            "options": ["أ) ...", "ب) ...", "ج) ...", "د) ..."],
+            "answer": "أ) ...",
+            "hint": "...",
+            "explanation": "..."
           }}
         ]
         """
+        generation_config = {"response_mime_type": "application/json"}
+        response = model.generate_content(prompt, generation_config=generation_config)
+        raw_text = response.text.strip()
+        match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
+        clean_json_str = match.group(0) if match else raw_text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_json_str)
 
-        max_retries = 4
-        base_delay = 10  # فترة انتظار ذكية تبدأ بـ 10 ثوانٍ وتتضاعف عند الحاجة
+    # دالة توليد الـ 3 اختبارات في طلب واحد (Single Batch Request) لتفادي استهلاك الـ Rate Limit
+    def generate_three_quizzes_in_one(pdf_text, count, key):
+        model = get_working_gemini_model(key)
+        random_seed = random.randint(1000, 999999)
 
-        for attempt in range(max_retries):
-            try:
-                generation_config = {"response_mime_type": "application/json"}
-                response = model.generate_content(prompt, generation_config=generation_config)
-                raw_text = response.text.strip()
-                
-                match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
-                if match:
-                    clean_json_str = match.group(0)
-                else:
-                    clean_json_str = raw_text.replace("```json", "").replace("```", "").strip()
-                    
-                parsed_data = json.loads(clean_json_str)
-                if isinstance(parsed_data, list):
-                    return parsed_data
-                elif isinstance(parsed_data, dict):
-                    for val in parsed_data.values():
-                        if isinstance(val, list):
-                            return val
-                raise Exception("البيانات المسترجعة ليست قائمة صالحة للأسئلة.")
-            except Exception as e:
-                err_str = str(e)
-                if "429" in err_str or "Quota exceeded" in err_str or "ResourceExhausted" in err_str:
-                    if attempt < max_retries - 1:
-                        sleep_time = base_delay * (2 ** attempt)
-                        time.sleep(sleep_time)
-                        continue
-                if attempt == max_retries - 1:
-                    raise e
-                time.sleep(3)
+        prompt = f"""
+        أنت خبير واضع امتحانات الثانوية العامة المصرية والجامعات.
+        قم بقراءة النص المستخرج بدقة:
+        ---
+        {pdf_text[:10000]}
+        ---
+        أنشئ ثلاثة اختبارات كاملة ومستقلة (سهل، متوسط، صعب) بناءً على المحتوى (معرف التوليد: {random_seed}).
+        كل اختبار يحتوي على {count} أسئلة اختيارات من متعدد (MCQ).
+        
+        يجب أن تكون الاستجابة بصيغة JSON صحيحة ومتوافقة تماماً مع الكائن التالي بدون أي نصوص خارجية:
+        {{
+          "سهل": [
+            {{
+              "q": "نص السؤال",
+              "options": ["أ) ...", "ب) ...", "ج) ...", "د) ..."],
+              "answer": "أ) ...",
+              "hint": "...",
+              "explanation": "..."
+            }}
+          ],
+          "متوسط": [
+            {{
+              "q": "نص السؤال",
+              "options": ["أ) ...", "ب) ...", "ج) ...", "د) ..."],
+              "answer": "أ) ...",
+              "hint": "...",
+              "explanation": "..."
+            }}
+          ],
+          "صعب": [
+            {{
+              "q": "نص السؤال",
+              "options": ["أ) ...", "ب) ...", "ج) ...", "د) ..."],
+              "answer": "أ) ...",
+              "hint": "...",
+              "explanation": "..."
+            }}
+          ]
+        }}
+        """
+        generation_config = {"response_mime_type": "application/json"}
+        response = model.generate_content(prompt, generation_config=generation_config)
+        raw_text = response.text.strip()
+        match = re.search(r'\{\s*".*\}\s*', raw_text, re.DOTALL)
+        clean_json_str = match.group(0) if match else raw_text.replace("```json", "").replace("```", "").strip()
+        return json.loads(clean_json_str)
 
     # --- تبويب الاختبارات والتحليل ---
     with tab_exam:
@@ -290,7 +313,7 @@ else:
             else:
                 if st.button("✨ إرسال وإنشاء أسئلة اختبار جديدة"):
                     try:
-                        with st.spinner("جاري استخراج النصوص وتحليل المحتوى بالذكاء الاصطناعي (يتم مراعاة فترات التبريد لتفادي قيود الـ API)..."):
+                        with st.spinner("جاري استخراج النصوص وتوليد بنك الأسئلة بالذكاء الاصطناعي (طلب ذكي موحد)..."):
                             pdf_text_data = extract_text_from_pdf(uploaded_file)
                             st.session_state.pdf_text = pdf_text_data
                             
@@ -298,40 +321,34 @@ else:
                             st.session_state.unlocked_hints = set()
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
-                                # زيادة زمن التوقف بين الاختبارات الثلاثة إلى 8 ثوانٍ لتجنب حظر الـ RPM
-                                q_easy = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "سهل", api_key)
-                                time.sleep(8)
-                                q_med = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "متوسط", api_key)
-                                time.sleep(8)
-                                q_hard = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "صعب", api_key)
-                                
+                                # طلب واحد فقط يجلب الـ 3 اختبارات معاً لمنع الـ Rate Limit تماماً
+                                three_quizzes = generate_three_quizzes_in_one(pdf_text_data, num_questions, api_key)
                                 st.session_state.quizzes = {
-                                    "سهل": q_easy,
-                                    "متوسط": q_med,
-                                    "صعب": q_hard
+                                    "سهل": three_quizzes.get("سهل", []),
+                                    "متوسط": three_quizzes.get("متوسط", []),
+                                    "صعب": three_quizzes.get("صعب", [])
                                 }
                             elif exam_type == "🚀 اختبار شامل للمادة":
                                 st.session_state.quizzes = {
-                                    "اختبار شامل": generate_quiz_with_ai(pdf_text_data, num_questions, "comprehensive", None, api_key)
+                                    "اختبار شامل": generate_single_quiz(pdf_text_data, num_questions, "comprehensive", None, api_key)
                                 }
                             elif exam_type == "📐 اختبار قوانين وتطبيقات (من ملف القوانين)":
                                 st.session_state.quizzes = {
-                                    "اختبار القوانين والتطبيقات": generate_quiz_with_ai(pdf_text_data, num_questions, "laws", None, api_key)
+                                    "اختبار القوانين والتطبيقات": generate_single_quiz(pdf_text_data, num_questions, "laws", None, api_key)
                                 }
                             else:
                                 st.session_state.quizzes = {
-                                    f"اختبار ({selected_single_level})": generate_quiz_with_ai(pdf_text_data, num_questions, "level", selected_single_level, api_key)
+                                    f"اختبار ({selected_single_level})": generate_single_quiz(pdf_text_data, num_questions, "level", selected_single_level, api_key)
                                 }
                                 
                             st.session_state.submitted_quiz = False
                             st.session_state.show_review_warning = False
-                            st.success("✅ تم توليد الامتحان بنجاح وصياغة الأسئلة والمعادلات!")
+                            st.success("✅ تم توليد الامتحانات بنجاح وصياغة الأسئلة والمعادلات!")
                     except Exception as e:
                         err_message = str(e)
                         if "429" in err_message or "Quota exceeded" in err_message or "ResourceExhausted" in err_message:
-                            st.error("⚠️ **تم استنفاد حدود الطلبات المؤقتة (Rate Limit) رغم صحة المفتاح.**\n\n"
-                                     "💡 **السبب:** الباقات المجانية لـ Gemini تفرض حد أقصى لعدد الطلبات في الدقيقة الواحدة (RPM). طلب 3 اختبارات دفعة واحدة يستهلك هذه الحصة فوراً.\n"
-                                     "🛠️ **الحل الفوري:** اختر من القائمة الجانبية **'اختبار واحد (مستوى مخصص)'** أو **'اختبار شامل'**، أو انتظر لمدة دقيقة واحدة ثم جرب مرة أخرى.")
+                            st.error("⚠️ **تم استنفاد حدود الطلبات المؤقتة (Rate Limit).**\n\n"
+                                     "💡 يرجى الانتظار لمدة 30 ثانية إلى دقيقة ثم إعادة المحاولة.")
                         else:
                             st.error(f"حدث خطأ أثناء التوليد: {e}")
 
@@ -355,7 +372,7 @@ else:
 
                     user_answers = {}
                     for i, q_item in enumerate(quiz_data):
-                        question_text = q_item.get('q') or q_item.get('question') or q_item.get('question_text') or f"السؤال رقم {i+1} (تعذر العثور على النص)"
+                        question_text = q_item.get('q') or q_item.get('question') or q_item.get('question_text') or f"السؤال رقم {i+1}"
                         
                         st.markdown(f"<div class='bright-card'>", unsafe_allow_html=True)
                         st.markdown(f"##### ❓ السؤال {i+1}:")
@@ -383,7 +400,6 @@ else:
                         )
                         user_answers[i] = None if selected_opt == "-- اختر إجابة --" else selected_opt
                         
-                        # العلامة المائية المحصورة في كارت الامتحان فقط
                         st.markdown("<div class='exam-watermark'>محمد عبدالله - Mohamed Abdallah</div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
