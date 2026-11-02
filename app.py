@@ -225,7 +225,7 @@ else:
                 "لإدخال PDF ومن أن الملف واضح وحجمه مناسب. التفاصيل: " + str(e)
             ) from e
 
-    # اختيار نموذج متاح فعلياً في المفتاح، مع التحديث للنماذج الحديثة (مثل gemini-3.8-flash)
+    # اختيار نموذج متاح وتصفية أي نماذج قديمة قد تسبب خطأ 404
     @st.cache_resource(show_spinner=False)
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
@@ -240,6 +240,9 @@ else:
                 methods = getattr(item, "supported_generation_methods", []) or []
                 if "generateContent" in methods:
                     name = item.name.replace("models/", "")
+                    # استبعاد النماذج غير المدعومة أو القديمة لمنع أخطاء 404
+                    if "2.5-flash" in name:
+                        continue
                     available.append(name)
         except Exception:
             available = preferred[:]
@@ -252,7 +255,8 @@ else:
         last_error = None
         for model_name in ordered:
             try:
-                return genai.GenerativeModel(model_name)
+                test_model = genai.GenerativeModel(model_name)
+                return test_model
             except Exception as exc:
                 last_error = exc
         raise RuntimeError(
