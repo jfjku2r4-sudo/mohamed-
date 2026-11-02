@@ -4,7 +4,7 @@ import re
 import random
 import time
 
-# محاولة استيراد مكتبة قراءة ملفات الـ PDF
+# محاولة استيراد مكتبة قراءة ملفات الـ PDF واستخراج النص منها
 try:
     import pypdf
     PDF_SUPPORT = True
@@ -170,6 +170,19 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
+    # دالة استخراج النص من ملف الـ PDF لتخفيف الضغط نهائياً على الـ API
+    def extract_text_from_pdf(uploaded_file):
+        text = ""
+        try:
+            reader = pypdf.PdfReader(uploaded_file)
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+        except Exception as e:
+            st.error(f"خطأ في قراءة ملف الـ PDF: {e}")
+        return text
+
     # دالة اختيار النموذج المحدثة لتشمل gemini-3.8-flash والبحث التلقائي
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
@@ -191,23 +204,25 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini مع نظام إعادة المحاولة الذكي لمنع خطأ 429 من الجذور
-    def generate_quiz_with_ai(pdf_bytes, count, mode_type, level_name, key):
+    # دالة التوليد التفاعلي باستخدام النص المستخرج (تجنباً لأخطاء الحجم والـ Quota)
+    def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
-        pdf_file_part = {"mime_type": "application/pdf", "data": pdf_bytes}
         random_seed = random.randint(1000, 999999)
 
         prompt_details = ""
         if mode_type == "laws":
-            prompt_details = "استخرج القوانين والمفاهيم العلمية والرياضية الواردة بالملف وصغ أسئلة وتطبيقات مسائل وحسابات ومعادلات عليها بدقة."
+            prompt_details = "استخرج القوانين والمفاهيم العلمية والرياضية الواردة بالنص وصغ أسئلة وتطبيقات مسائل وحسابات ومعادلات عليها بدقة."
         elif mode_type == "comprehensive":
-            prompt_details = "صغ اختباراً شاملاً يغطي كافة أجزاء وفصول وموضوعات الملف بشكل متوازن ومتدرج."
+            prompt_details = "صغ اختباراً شاملاً يغطي كافة أجزاء وفصول وموضوعات النص بشكل متوازن ومتدرج."
         else:
             prompt_details = f"صغ الأسئلة بمستوى ({level_name}) تحديداً."
 
         prompt = f"""
         أنت خبير واضع امتحانات الثانوية العامة المصرية والجامعات.
-        قم بقراءة ملف الـ PDF بدقة.
+        قم بقراءة النص المستخرج من المنهج بدقة:
+        ---
+        {pdf_text[:12000]}  # اقتطاع ذكي لأول 12 ألف حرف لضمان السرعة وعدم تجاوز الحد
+        ---
         أنشئ {count} أسئلة اختيارات من متعدد (MCQ) جديدة تماماً وفريدة (معرف التوليد: {random_seed}).
         تفاصيل التوليد: {prompt_details}
 
@@ -229,12 +244,12 @@ else:
         ]
         """
 
-        max_retries = 4
-        delay = 12  # زيادة فترة الانتظار الأولية لتفادي تجاوز حد الدقيقة (5 طلبات)
+        max_retries = 3
+        delay = 10
 
         for attempt in range(max_retries):
             try:
-                response = model.generate_content([pdf_file_part, prompt])
+                response = model.generate_content(prompt)
                 raw_text = response.text.strip()
                 
                 match = re.search(r'\[\s*\{.*\}\s*\]', raw_text, re.DOTALL)
@@ -248,9 +263,7 @@ else:
                 err_str = str(e)
                 if "429" in err_str or "Quota exceeded" in err_str:
                     if attempt < max_retries - 1:
-                        # مضاعفة وقت الانتظار تلقائياً مع كل محاولة فاشلة
-                        sleep_time = delay * (2 ** attempt)
-                        time.sleep(sleep_time)
+                        time.sleep(delay * (attempt + 1))
                         continue
                 raise e
 
@@ -267,20 +280,19 @@ else:
             else:
                 if st.button("✨ إرسال وإنشاء أسئلة اختبار جديدة"):
                     try:
-                        with st.spinner("جاري تحليل المحتوى وتوليد الأسئلة والمعادلات بالذكاء الاصطناعي (قد يستغرق بضع ثوانٍ لتجنب ضغط الخادم)..."):
-                            bytes_data = uploaded_file.getvalue()
-                            st.session_state.pdf_bytes = bytes_data
+                        with st.spinner("جاري استخراج النصوص وتحليل المحتوى بالذكاء الاصطناعي..."):
+                            pdf_text_data = extract_text_from_pdf(uploaded_file)
+                            st.session_state.pdf_text = pdf_text_data
                             
                             st.session_state.hints_used = 0
                             st.session_state.unlocked_hints = set()
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
-                                # وضع فاصل زمني آمن وطويل نسبياً (12 ثانية) بين كل طلب وطلب لتجاوز حدود الـ RPM المجاني
-                                q_easy = generate_quiz_with_ai(bytes_data, num_questions, "level", "سهل", api_key)
-                                time.sleep(12)
-                                q_med = generate_quiz_with_ai(bytes_data, num_questions, "level", "متوسط", api_key)
-                                time.sleep(12)
-                                q_hard = generate_quiz_with_ai(bytes_data, num_questions, "level", "صعب", api_key)
+                                q_easy = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "سهل", api_key)
+                                time.sleep(8)
+                                q_med = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "متوسط", api_key)
+                                time.sleep(8)
+                                q_hard = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "صعب", api_key)
                                 
                                 st.session_state.quizzes = {
                                     "سهل": q_easy,
@@ -289,15 +301,15 @@ else:
                                 }
                             elif exam_type == "🚀 اختبار شامل للمادة":
                                 st.session_state.quizzes = {
-                                    "اختبار شامل": generate_quiz_with_ai(bytes_data, num_questions, "comprehensive", None, api_key)
+                                    "اختبار شامل": generate_quiz_with_ai(pdf_text_data, num_questions, "comprehensive", None, api_key)
                                 }
                             elif exam_type == "📐 اختبار قوانين وتطبيقات (من ملف القوانين)":
                                 st.session_state.quizzes = {
-                                    "اختبار القوانين والتطبيقات": generate_quiz_with_ai(bytes_data, num_questions, "laws", None, api_key)
+                                    "اختبار القوانين والتطبيقات": generate_quiz_with_ai(pdf_text_data, num_questions, "laws", None, api_key)
                                 }
                             else:
                                 st.session_state.quizzes = {
-                                    f"اختبار ({selected_single_level})": generate_quiz_with_ai(bytes_data, num_questions, "level", selected_single_level, api_key)
+                                    f"اختبار ({selected_single_level})": generate_quiz_with_ai(pdf_text_data, num_questions, "level", selected_single_level, api_key)
                                 }
                                 
                             st.session_state.submitted_quiz = False
@@ -306,11 +318,9 @@ else:
                     except Exception as e:
                         err_message = str(e)
                         if "429" in err_message or "Quota exceeded" in err_message:
-                            st.error("⚠️ **تم تجاوز الحد المسموح للطلبات في الدقيقة أو اليوم في الباقة المجانية لـ Gemini.**\n\n"
-                                     "💡 **الحل الجذري لتفادي ذلك تماماً:**\n"
-                                     "1. يفضل اختيار **'اختبار واحد (مستوى مخصص)'** أو **'اختبار شامل'** بدلاً من '3 اختبارات دفعة واحدة' لتقليل عدد الطلبات المرسلة.\n"
-                                     "2. الانتظار لمدة دقيقة أو دقيقتين ثم المحاولة مرة أخرى.\n"
-                                     "3. استخدام مفتاح API جديد من Google AI Studio.")
+                            st.error("⚠️ **تم استنفاد حدود الطلبات في الدقيقة (RPM) للنسخة المجانية.**\n\n"
+                                     "💡 **نصيحة هامة لتجنب المشكلة فوراً:**\n"
+                                     "• اختر من القائمة الجانبية **'اختبار واحد (مستوى مخصص)'** بدلاً من '3 اختبارات' لتقليل الطلبات المرسلة دفعة واحدة.")
                         else:
                             st.error(f"حدث خطأ أثناء التوليد: {e}")
 
@@ -419,7 +429,7 @@ else:
     with tab_chat:
         st.markdown("<div class='sub-header'>تحدث مع الذكاء الاصطناعي لتحليل أي جزء من المادة أو طرح الأسئلة والقوانين والمعادلات</div>", unsafe_allow_html=True)
 
-        if "pdf_bytes" not in st.session_state:
+        if "pdf_text" not in st.session_state:
             st.info("💡 قم برفع ملف الـ PDF في التبويب الأول أولاً، ثم يمكنك إجراء دردشة وتحليل تفاعلي مع الذكاء الاصطناعي حول محتواه.")
         elif not api_key:
             st.warning("⚠️ يرجى إدخال مفتاح Gemini API Key في القائمة الجانبية لتفعيل الشات.")
@@ -437,16 +447,18 @@ else:
                     with st.spinner("جاري التحليل والإجابة بسرعة..."):
                         try:
                             model = get_working_gemini_model(api_key)
-                            pdf_part = {"mime_type": "application/pdf", "data": st.session_state.pdf_bytes}
-                            
                             chat_prompt = f"""
                             أنت معلم وثانوية عامة ومساعد محترف.
-                            بناءً على ملف المادة المرفق، أجب على سؤال الطالب بكل دقة ووضوح وبنظام منظم.
+                            بناءً على نص المادة المستخرج التالي:
+                            ---
+                            {st.session_state.pdf_text[:10000]}
+                            ---
+                            أجب على سؤال الطالب بكل دقة ووضوح وبنظام منظم.
                             استخدم صياغة LaTeX في المعادلة إن وجدت.
                             سؤال الطالب: {user_query}
                             """
                             
-                            chat_response = model.generate_content([pdf_part, chat_prompt])
+                            chat_response = model.generate_content(chat_prompt)
                             ans_text = chat_response.text
                             
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
