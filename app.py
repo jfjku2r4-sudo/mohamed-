@@ -2,6 +2,7 @@ import streamlit as st
 import json
 import re
 import random
+import hashlib
 import time
 import tempfile
 from pathlib import Path
@@ -140,6 +141,7 @@ else:
         st.markdown("---")
         
         st.header("⚙️ إعدادات النموذج والاختبار")
+        st.caption("⚡ وضع الاستجابة السريعة مفعّل")
         api_key = st.text_input("🔑 مفتاح Gemini API Key:", type="password", help="أدخل مفتاح Google Gemini API")
         
         exam_type = st.radio(
@@ -183,16 +185,35 @@ else:
         return genai.Client(api_key=key)
 
     GEMINI_MODEL = "gemini-3.8-flash"
+    FAST_GENERATION_CONFIG = {"thinking_level": "low"}
 
-    def _interaction_text(client, prompt, generation_config=None):
-        kwargs = {"model": GEMINI_MODEL, "input": prompt}
+    def _interaction_text(client, prompt, generation_config=None, max_output_tokens=2048):
+        config = dict(FAST_GENERATION_CONFIG)
         if generation_config:
-            kwargs["generation_config"] = generation_config
-        result = client.interactions.create(**kwargs)
+            config.update(generation_config)
+        config.setdefault("max_output_tokens", max_output_tokens)
+        result = client.interactions.create(
+            model=GEMINI_MODEL, input=prompt,
+            generation_config=config, store=False,
+        )
         output = getattr(result, "output_text", None)
         if not output:
             raise ValueError("لم يُرجع Gemini نصاً؛ قد تكون الاستجابة فارغة أو محجوبة.")
         return output.strip()
+
+    def _stream_chat_answer(client, prompt):
+        stream = client.interactions.create(
+            model=GEMINI_MODEL, input=prompt,
+            generation_config={**FAST_GENERATION_CONFIG, "max_output_tokens": 2048},
+            store=False, stream=True,
+        )
+        for event in stream:
+            if getattr(event, "event_type", None) == "step.delta":
+                delta = getattr(event, "delta", None)
+                if getattr(delta, "type", None) == "text":
+                    chunk = getattr(delta, "text", "")
+                    if chunk:
+                        yield chunk
 
     # استخراج النص من PDF النصي، واستخدام Interactions API للملفات المصورة.
     def extract_text_from_pdf(uploaded_file, api_key=None):
@@ -231,7 +252,7 @@ else:
                     break
                 if "FAILED" in state:
                     raise RuntimeError("فشل Gemini في معالجة ملف PDF المرفوع.")
-                time.sleep(2)
+                time.sleep(1)
                 file_info = client.files.get(name=uploaded.name)
 
             prompt = """اقرأ ملف PDF المرفق صفحةً صفحة، واستخرج محتواه التعليمي بما في ذلك النصوص العربية والإنجليزية والعناوين والتعريفات والقوانين والمعادلات والجداول والرموز. حافظ على ترتيب الصفحات، ولا تلخص ولا تخترع نصاً غير واضح. ضع [غير واضح] عند تعذر القراءة. أعد النص المستخرج فقط مع فاصل واضح بين الصفحات."""
@@ -342,28 +363,14 @@ else:
             return min(max(float(match.group(1)) + 2, 5), 90)
         return min(30 * (2 ** attempt), 90)
 
-    def _generate_json_with_retry(model, prompt):
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                raw = _interaction_text(
-                    model,
-                    prompt,
-                    generation_config={"response_mime_type": "application/json"},
-                )
-                return _extract_json_payload(raw)
-            except Exception as exc:
-                if (attempt == max_attempts - 1
-                        or not _is_rate_limit_error(exc)
-                        or _is_daily_quota_error(exc)):
-                    raise
-                delay = _retry_delay(exc, attempt)
-                st.warning(
-                    f"وصلنا إلى حد الطلبات المؤقت. ستتم إعادة المحاولة بعد {int(delay)} ثانية "
-                    f"(المحاولة {attempt + 2} من {max_attempts})."
-                )
-                time.sleep(delay)
-        raise RuntimeError("تعذر إكمال الطلب بعد عدة محاولات.")
+    def _generate_json_with_retry(model, prompt, max_output_tokens=8192):
+        # إظهار حدود الحصة فوراً بدلاً من انتظار محاولات إعادة طويلة.
+        raw = _interaction_text(
+            model, prompt,
+            generation_config={"response_mime_type": "application/json"},
+            max_output_tokens=max_output_tokens,
+        )
+        return _extract_json_payload(raw)
 
     # توليد اختبار واحد أو الاختبارات الثلاثة في استدعاء واحد لتقليل استهلاك RPM.
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
@@ -385,16 +392,16 @@ else:
 يجب أن تختلف الأسئلة بين المستويات قدر الإمكان وألا تخرج عن المصدر.
 المصدر:
 <<<
-{pdf_text[:18000]}
+{pdf_text[:14000]}
 >>>
 أعد JSON فقط بهذا الشكل:
 {{
-  "easy": [{{"q":"السؤال","options":["أ) ...","ب) ...","ج) ...","د) ..."],"answer":"أ) ...","hint":"تلميح لا يكشف الإجابة","explanation":"شرح الإجابة"}}],
+  "easy": [{{"q":"السؤال","options":["أ) ...","ب) ...","ج) ...","د) ..."],"answer":"أ) ...","hint":"تلميح لا يكشف الإجابة","explanation":"شرح مختصر للإجابة في جملة أو جملتين"}}],
   "medium": [],
   "hard": []
 }}
 ضع {count} سؤالاً بالضبط في كل قائمة. اجعل answer مطابقاً حرفياً لأحد options.
-استخدم LaTeX للمعادلات بين علامتي $ عند الحاجة. معرف التنويع: {seed}.
+اجعل الشرح مختصراً من جملة أو جملتين لتسريع التوليد. استخدم LaTeX للمعادلات بين علامتي $ عند الحاجة. معرف التنويع: {seed}.
 """
         else:
             if mode_type == "laws":
@@ -410,15 +417,16 @@ else:
             prompt = f"""
 أنت واضع امتحانات متخصص في المنهج المصري. اعتمد حصراً على محتوى المصدر:
 <<<
-{pdf_text[:18000]}
+{pdf_text[:14000]}
 >>>
 أنشئ {count} سؤال اختيار من متعدد جديدة. {details}
 أعد JSON فقط بالشكل:
-{{"{title}":[{{"q":"السؤال","options":["أ) ...","ب) ...","ج) ...","د) ..."],"answer":"أ) ...","hint":"تلميح لا يكشف الإجابة","explanation":"شرح تفصيلي للإجابة"}}]}}
+{{"{title}":[{{"q":"السؤال","options":["أ) ...","ب) ...","ج) ...","د) ..."],"answer":"أ) ...","hint":"تلميح لا يكشف الإجابة","explanation":"شرح مختصر للإجابة في جملة أو جملتين"}}]}}
 ضع {count} سؤالاً بالضبط، واجعل answer مطابقاً حرفياً لأحد options.
-استخدم LaTeX للمعادلات بين علامتي $ عند الحاجة. معرف التنويع: {seed}.
+اجعل الشرح مختصراً من جملة أو جملتين لتسريع التوليد. استخدم LaTeX للمعادلات بين علامتي $ عند الحاجة. معرف التنويع: {seed}.
 """
-        payload = _generate_json_with_retry(model, prompt)
+        output_limit = min(24000, max(4096, int(count) * (420 if mode_type == "triple" else 480)))
+        payload = _generate_json_with_retry(model, prompt, max_output_tokens=output_limit)
 
         if mode_type == "triple":
             if not isinstance(payload, dict):
@@ -445,15 +453,22 @@ else:
 
         if uploaded_file is not None:
             if not PDF_SUPPORT or not GEMINI_SUPPORT:
-                st.error("⚠️ يرجى التأكد من تثبيت المكتبات المطلوبة (pypdf و google-generativeai).")
+                st.error("⚠️ يرجى التأكد من تثبيت المكتبات المطلوبة (pypdf و google-genai).")
             elif not api_key:
                 st.warning("⚠️ يرجى كتابة مفتاح Gemini API Key في القائمة الجانبية أولاً.")
             else:
                 if st.button("✨ إرسال وإنشاء أسئلة اختبار جديدة"):
                     try:
-                        with st.spinner("جاري استخراج النصوص وتحليل المحتوى بالذكاء الاصطناعي (يتم مراعاة فترات التبريد لتفادي قيود الـ API)..."):
-                            pdf_text_data = extract_text_from_pdf(uploaded_file, api_key)
-                            st.session_state.pdf_text = pdf_text_data
+                        with st.spinner("جاري تجهيز الملف وإنشاء الاختبار..."):
+                            pdf_bytes = uploaded_file.getvalue()
+                            pdf_fingerprint = hashlib.sha256(pdf_bytes).hexdigest()
+                            if (st.session_state.get("pdf_fingerprint") == pdf_fingerprint
+                                    and st.session_state.get("pdf_text")):
+                                pdf_text_data = st.session_state.pdf_text
+                            else:
+                                pdf_text_data = extract_text_from_pdf(uploaded_file, api_key)
+                                st.session_state.pdf_text = pdf_text_data
+                                st.session_state.pdf_fingerprint = pdf_fingerprint
                             
                             st.session_state.hints_used = 0
                             st.session_state.unlocked_hints = set()
@@ -636,7 +651,9 @@ else:
                             سؤال الطالب: {user_query}
                             """
                             
-                            ans_text = _interaction_text(model, chat_prompt)
+                            ans_text = st.write_stream(_stream_chat_answer(model, chat_prompt))
+                            if not ans_text:
+                                raise ValueError("لم تصل إجابة من Gemini.")
                             
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
                             st.rerun()
