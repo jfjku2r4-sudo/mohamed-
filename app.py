@@ -170,11 +170,10 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة اختيار النموذج السريع والمدعوم بناءً على Moodeelota ammayyaa (gemini-2.5-flash ykn gemini-2.5-pro)
+    # دالة اختيار النموذج المحدثة لتشمل gemini-3.8-flash والبحث التلقائي
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
-        # Moodeelota haaraa fi ammayyaa kan hojjetan qofa akka filatu taasifameera
-        fallback_models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro']
+        fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro']
         
         for f_model in fallback_models:
             try:
