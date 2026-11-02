@@ -183,10 +183,10 @@ else:
             st.error(f"خطأ في قراءة ملف الـ PDF: {e}")
         return text
 
-    # دالة اختيار النموذج المدعوم والحديث
+    # دالة اختيار النموذج المحدثة لتدعم gemini-3.8-flash كخيار أول رئيسي
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
-        fallback_models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro']
+        fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-pro']
         
         for f_model in fallback_models:
             try:
@@ -204,7 +204,7 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini باستخدام النصوص المستخرجة لمنع أخطاء الحصص
+    # دالة التوليد التفاعلي عبر Gemini باستخدام النصوص المستخرجة لمنع أخطاء الحصص والحجم
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
         random_seed = random.randint(1000, 999999)
