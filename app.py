@@ -186,7 +186,8 @@ else:
     st.markdown("<div class='main-header'>🎓 منصة الامتحانات والتحليل الذكي</div>", unsafe_allow_html=True)
 
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
-    tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])    # إنشاء عميل Gemini حديث. لا نستخدم google-generativeai القديمة.
+    tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
+    # إنشاء عميل Gemini حديث. لا نستخدم google-generativeai القديمة.
     @st.cache_resource(show_spinner=False)
     def get_working_gemini_model(key):
         if not GEMINI_SUPPORT:
@@ -351,7 +352,8 @@ else:
                 f"تم استلام {len(valid)} سؤالًا صالحًا فقط من أصل {expected_count}. "
                 "لم يتم اعتماد الاختبار حتى لا يظهر ناقصًا؛ أعد المحاولة."
             )
-        return valid[:expected_count]    def _is_rate_limit_error(exc):
+        return valid[:expected_count]
+    def _is_rate_limit_error(exc):
         message = str(exc).lower()
         return any(token in message for token in (
             "429", "quota exceeded", "resourceexhausted",
@@ -521,7 +523,8 @@ else:
                                 "لديه حصة مناسبة."
                             )
                         else:
-                            st.error(f"حدث خطأ أثناء التوليد: {err_message}")        # عرض الامتحانات
+                            st.error(f"حدث خطأ أثناء التوليد: {err_message}")
+        # عرض الامتحانات
         if "quizzes" in st.session_state and st.session_state.quizzes:
             st.markdown("---")
 
