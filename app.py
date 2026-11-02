@@ -170,7 +170,7 @@ else:
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
-    # دالة استخراج النص من ملف الـ PDF لتخفيف الضغط نهائياً على الـ API
+    # دالة استخراج النص من ملف الـ PDF لتخفيف الحجم تماماً على الـ API
     def extract_text_from_pdf(uploaded_file):
         text = ""
         try:
@@ -183,10 +183,10 @@ else:
             st.error(f"خطأ في قراءة ملف الـ PDF: {e}")
         return text
 
-    # دالة اختيار النموذج المحدثة لتشمل gemini-3.8-flash والبحث التلقائي
+    # دالة اختيار النموذج المدعوم والحديث
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
-        fallback_models = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro']
+        fallback_models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-pro']
         
         for f_model in fallback_models:
             try:
@@ -204,7 +204,7 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي باستخدام النص المستخرج (تجنباً لأخطاء الحجم والـ Quota)
+    # دالة التوليد التفاعلي عبر Gemini باستخدام النصوص المستخرجة لمنع أخطاء الحصص
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
         random_seed = random.randint(1000, 999999)
@@ -221,7 +221,7 @@ else:
         أنت خبير واضع امتحانات الثانوية العامة المصرية والجامعات.
         قم بقراءة النص المستخرج من المنهج بدقة:
         ---
-        {pdf_text[:12000]}  # اقتطاع ذكي لأول 12 ألف حرف لضمان السرعة وعدم تجاوز الحد
+        {pdf_text[:12000]}
         ---
         أنشئ {count} أسئلة اختيارات من متعدد (MCQ) جديدة تماماً وفريدة (معرف التوليد: {random_seed}).
         تفاصيل التوليد: {prompt_details}
@@ -289,9 +289,9 @@ else:
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
                                 q_easy = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "سهل", api_key)
-                                time.sleep(8)
+                                time.sleep(6)
                                 q_med = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "متوسط", api_key)
-                                time.sleep(8)
+                                time.sleep(6)
                                 q_hard = generate_quiz_with_ai(pdf_text_data, num_questions, "level", "صعب", api_key)
                                 
                                 st.session_state.quizzes = {
@@ -318,9 +318,8 @@ else:
                     except Exception as e:
                         err_message = str(e)
                         if "429" in err_message or "Quota exceeded" in err_message:
-                            st.error("⚠️ **تم استنفاد حدود الطلبات في الدقيقة (RPM) للنسخة المجانية.**\n\n"
-                                     "💡 **نصيحة هامة لتجنب المشكلة فوراً:**\n"
-                                     "• اختر من القائمة الجانبية **'اختبار واحد (مستوى مخصص)'** بدلاً من '3 اختبارات' لتقليل الطلبات المرسلة دفعة واحدة.")
+                            st.error("⚠️ **تم استنفاد حدود الطلبات المؤقتة (Rate Limit).**\n\n"
+                                     "💡 **نصيحة هامة:** اختر **'اختبار واحد (مستوى مخصص)'** أو انتظر دقيقة ثم حاول مرة أخرى.")
                         else:
                             st.error(f"حدث خطأ أثناء التوليد: {e}")
 
