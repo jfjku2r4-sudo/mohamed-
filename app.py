@@ -171,17 +171,61 @@ else:
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
     # دالة استخراج النص من ملف الـ PDF لتخفيف الحجم تماماً على الـ API
-    def extract_text_from_pdf(uploaded_file):
+    # استخراج نص PDF: يبدأ بالاستخراج العادي، وإذا كان الملف ممسوحاً ضوئياً
+    # يستخدم Gemini لقراءة صفحات PDF مباشرة دون الحاجة إلى Tesseract أو Poppler.
+    def extract_text_from_pdf(uploaded_file, api_key=None):
+        pdf_bytes = uploaded_file.getvalue()
         text = ""
         try:
             reader = pypdf.PdfReader(uploaded_file)
+            pages_text = []
             for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
+                pages_text.append(page.extract_text() or "")
+            text = "\\n".join(pages_text).strip()
         except Exception as e:
-            st.error(f"خطأ في قراءة ملف الـ PDF: {e}")
-        return text
+            st.warning(f"تعذر استخراج النص بالطريقة التقليدية: {e}")
+
+        # إذا كان النص كافياً فلا نستهلك طلب Gemini إضافياً.
+        if len(text) >= 80:
+            return text
+
+        if not api_key:
+            raise ValueError(
+                "الملف لا يحتوي على نص قابل للاستخراج. أدخل مفتاح Gemini "
+                "لتفعيل قراءة ملفات PDF المصورة تلقائياً."
+            )
+        if len(pdf_bytes) > 20 * 1024 * 1024:
+            raise ValueError(
+                "حجم ملف PDF أكبر من 20 ميجابايت. قلّل حجمه أو قسّمه إلى ملفات أصغر."
+            )
+
+        try:
+            model = get_working_gemini_model(api_key)
+            st.info(
+                "📷 الملف يبدو ممسوحاً ضوئياً؛ تتم قراءة صفحاته واستخراج "
+                "النصوص والمعادلات تلقائياً..."
+            )
+            response = model.generate_content(
+                [
+                    {"mime_type": "application/pdf", "data": pdf_bytes},
+                    """اقرأ ملف PDF المرفق صفحةً صفحة، واستخرج محتواه التعليمي
+                    بما في ذلك النصوص العربية والإنجليزية والعناوين والتعريفات
+                    والقوانين والمعادلات والجداول والرموز. حافظ على ترتيب الصفحات،
+                    ولا تلخص ولا تخترع نصاً غير واضح. ضع [غير واضح] عند تعذر القراءة.
+                    أعد النص المستخرج فقط مع فاصل واضح بين الصفحات."""
+                ],
+                generation_config={"temperature": 0.1},
+                request_options={"timeout": 240},
+            )
+            scanned_text = (getattr(response, "text", None) or "").strip()
+            if len(scanned_text) < 40:
+                raise ValueError("لم يتمكن Gemini من قراءة نص كافٍ من صفحات الملف.")
+            return scanned_text
+        except Exception as e:
+            raise RuntimeError(
+                "تعذرت قراءة ملف PDF المصوّر تلقائياً. تأكد من دعم نموذج Gemini "
+                "لإدخال PDF ومن أن الملف واضح وحجمه مناسب. التفاصيل: " + str(e)
+            ) from e
 
     # اختيار نموذج متاح فعلياً في المفتاح، مع أسماء صحيحة وترتيب أولوية
     @st.cache_resource(show_spinner=False)
@@ -418,7 +462,7 @@ else:
                 if st.button("✨ إرسال وإنشاء أسئلة اختبار جديدة"):
                     try:
                         with st.spinner("جاري استخراج النصوص وتحليل المحتوى بالذكاء الاصطناعي (يتم مراعاة فترات التبريد لتفادي قيود الـ API)..."):
-                            pdf_text_data = extract_text_from_pdf(uploaded_file)
+                            pdf_text_data = extract_text_from_pdf(uploaded_file, api_key)
                             st.session_state.pdf_text = pdf_text_data
                             
                             st.session_state.hints_used = 0
