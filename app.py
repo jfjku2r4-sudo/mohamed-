@@ -171,8 +171,6 @@ else:
     tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
 
     # دالة استخراج النص من ملف الـ PDF لتخفيف الحجم تماماً على الـ API
-    # استخراج نص PDF: يبدأ بالاستخراج العادي، وإذا كان الملف ممسوحاً ضوئياً
-    # يستخدم Gemini لقراءة صفحات PDF مباشرة دون الحاجة إلى Tesseract أو Poppler.
     def extract_text_from_pdf(uploaded_file, api_key=None):
         pdf_bytes = uploaded_file.getvalue()
         text = ""
@@ -181,7 +179,7 @@ else:
             pages_text = []
             for page in reader.pages:
                 pages_text.append(page.extract_text() or "")
-            text = "\\n".join(pages_text).strip()
+            text = "\n".join(pages_text).strip()
         except Exception as e:
             st.warning(f"تعذر استخراج النص بالطريقة التقليدية: {e}")
 
@@ -227,12 +225,12 @@ else:
                 "لإدخال PDF ومن أن الملف واضح وحجمه مناسب. التفاصيل: " + str(e)
             ) from e
 
-    # اختيار نموذج متاح فعلياً في المفتاح، مع أسماء صحيحة وترتيب أولوية
+    # اختيار نموذج متاح فعلياً في المفتاح، مع التحديث للنماذج الحديثة (مثل gemini-3.8-flash)
     @st.cache_resource(show_spinner=False)
     def get_working_gemini_model(key):
         genai.configure(api_key=key)
         preferred = [
-            "gemini-2.5-flash",
+            "gemini-3.8-flash",
             "gemini-2.0-flash",
             "gemini-1.5-flash",
         ]
@@ -244,7 +242,6 @@ else:
                     name = item.name.replace("models/", "")
                     available.append(name)
         except Exception:
-            # بعض البيئات تمنع list_models؛ نجرب الأسماء الشائعة مباشرة.
             available = preferred[:]
 
         ordered = [name for name in preferred if name in available]
@@ -271,7 +268,6 @@ else:
         try:
             return json.loads(cleaned)
         except json.JSONDecodeError:
-            # استخراج أول كائن أو مصفوفة JSON كاملة عند وجود نص زائد.
             decoder = json.JSONDecoder()
             for pos, char in enumerate(cleaned):
                 if char in "[{":
@@ -303,7 +299,6 @@ else:
             if len(options) < 2:
                 continue
             answer = str(answer).strip()
-            # توحيد الإجابة مع الاختيارات لتفادي فشل التصحيح بسبب اختلاف مسافات بسيطة.
             matched = next((option for option in options if option.strip() == answer), None)
             if matched is None:
                 matched = next((option for option in options
@@ -340,7 +335,6 @@ else:
 
     def _retry_delay(exc, attempt):
         message = str(exc)
-        # التقاط مدة الانتظار إن أرسلها الخادم (مثل retry in 32.4s).
         match = re.search(r"(?:retry|wait)[^0-9]{0,30}(\d+(?:\.\d+)?)\s*s", message, re.I)
         if match:
             return min(max(float(match.group(1)) + 2, 5), 90)
@@ -375,7 +369,6 @@ else:
                 time.sleep(delay)
         raise RuntimeError("تعذر إكمال الطلب بعد عدة محاولات.")
 
-    # توليد اختبار واحد أو الاختبارات الثلاثة في استدعاء واحد لتقليل استهلاك RPM.
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         if not pdf_text or not pdf_text.strip():
             raise ValueError(
@@ -442,7 +435,6 @@ else:
         if isinstance(payload, dict):
             questions = payload.get("questions") or payload.get("laws") or payload.get("data")
             if questions is None:
-                # دعم استجابة قائمة داخل مفتاح واحد غير متوقع.
                 questions = next((v for v in payload.values() if isinstance(v, list)), None)
         else:
             questions = payload
@@ -475,7 +467,6 @@ else:
                                 )
 
                             if exam_type == "🔥 3 اختبارات (سهل، متوسط، صعب)":
-                                # طلب واحد فقط يحتوي على المستويات الثلاثة لتقليل استهلاك الحصة.
                                 st.session_state.quizzes = generate_quiz_with_ai(
                                     pdf_text_data, int(num_questions), "triple", None, api_key
                                 )
@@ -556,7 +547,6 @@ else:
                         )
                         user_answers[i] = None if selected_opt == "-- اختر إجابة --" else selected_opt
                         
-                        # العلامة المائية المحصورة في كارت الامتحان فقط
                         st.markdown("<div class='exam-watermark'>محمد عبدالله - Mohamed Abdallah</div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
 
