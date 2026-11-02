@@ -204,7 +204,7 @@ else:
             
         raise Exception("لم يتم العثور على أي نموذج مدعوم في مفتاح API هذا. تأكد من صحة المفتاح.")
 
-    # دالة التوليد التفاعلي عبر Gemini مع إجبار النموذج على إخراج JSON صالح 100%
+    # دالة التوليد التفاعلي عبر Gemini مع تحديد الهيكل بوضوح لضمان تطابق المفاتيح
     def generate_quiz_with_ai(pdf_text, count, mode_type, level_name, key):
         model = get_working_gemini_model(key)
         random_seed = random.randint(1000, 999999)
@@ -231,7 +231,16 @@ else:
         2. الإجابات يجب أن تكون واضحة ومحددة.
         3. لكل سؤال أضف تلميحاً مساعداً (hint) لا يكشف الحل مباشرة.
         4. أضف شرحاً تفصيلياً ممتازاً لسبب الإجابة الصحيحة.
-        5. يجب أن تكون الاستجابة بصيغة JSON صحيحة ومتوافقة تماماً مع المعيار (Array of Objects) بدون أي نصوص أو تعليقات خارجية.
+        5. يجب أن تكون الاستجابة بصيغة JSON صحيحة ومتوافقة تماماً مع المعيار التالي (Array of Objects) بدون أي نصوص أو تعليقات خارجية:
+        [
+          {{
+            "q": "نص السؤال هنا",
+            "options": ["أ) الاختيار الأول", "ب) الاختيار الثاني", "ج) الاختيار الثالث", "د) الاختيار الرابع"],
+            "answer": "أ) الاختيار الأول",
+            "hint": "تلميح ذكي للحل",
+            "explanation": "الشرح التفصيلي للحل"
+          }}
+        ]
         """
 
         max_retries = 3
@@ -239,7 +248,6 @@ else:
 
         for attempt in range(max_retries):
             try:
-                # استخدام إعدادات التوليد لفرض صيغة JSON وتجنب أي خطأ في التحليل
                 generation_config = {"response_mime_type": "application/json"}
                 response = model.generate_content(prompt, generation_config=generation_config)
                 raw_text = response.text.strip()
@@ -250,7 +258,16 @@ else:
                 else:
                     clean_json_str = raw_text.replace("```json", "").replace("```", "").strip()
                     
-                return json.loads(clean_json_str)
+                parsed_data = json.loads(clean_json_str)
+                # التأكد من صحة البيانات وأنها قائمة
+                if isinstance(parsed_data, list):
+                    return parsed_data
+                elif isinstance(parsed_data, dict):
+                    # البحث عن أول مفتاح يحتوي على قائمة في حال تم إرجاع الكائن داخل كود مغلف
+                    for val in parsed_data.values():
+                        if isinstance(val, list):
+                            return val
+                raise Exception("البيانات المسترجعة ليست قائمة صالحة للأسئلة.")
             except Exception as e:
                 err_str = str(e)
                 if "429" in err_str or "Quota exceeded" in err_str:
@@ -337,9 +354,12 @@ else:
 
                     user_answers = {}
                     for i, q_item in enumerate(quiz_data):
+                        # معالجة آمنة لاستخراج نص السؤال بغض النظر عن اسم المفتاح
+                        question_text = q_item.get('q') or q_item.get('question') or q_item.get('question_text') or f"السؤال رقم {i+1} (تعذر العثور على النص)"
+                        
                         st.markdown(f"<div class='bright-card'>", unsafe_allow_html=True)
                         st.markdown(f"##### ❓ السؤال {i+1}:")
-                        st.write(q_item['q'])
+                        st.write(question_text)
                         
                         hint_key = f"{current_key}_{i}"
                         show_hint_btn = st.checkbox(f"💡 إظهار التلميحة (تستهلك 1 من الفرص)", key=f"chk_hint_{hint_key}")
@@ -355,9 +375,10 @@ else:
                             if hint_key in st.session_state.unlocked_hints:
                                 st.info(f"💡 **تلميح:** {q_item.get('hint', 'لا يوجد تلميح متوفر.')}")
 
+                        options_list = q_item.get('options') or q_item.get('choices') or ["أ) -", "ب) -", "ج) -", "د) -"]
                         selected_opt = st.radio(
                             label=f"اختر الإجابة الصحيحة للسؤال {i+1}:",
-                            options=["-- اختر إجابة --"] + q_item['options'],
+                            options=["-- اختر إجابة --"] + options_list,
                             key=f"rad_{current_key}_{i}"
                         )
                         user_answers[i] = None if selected_opt == "-- اختر إجابة --" else selected_opt
@@ -396,7 +417,7 @@ else:
                 st.markdown(f"### 📊 النتيجة التفصيلية لاختبار: ({active_key})")
                 
                 for i, q_data in enumerate(quiz):
-                    correct_ans = q_data['answer']
+                    correct_ans = q_data.get('answer') or q_data.get('correct_answer')
                     user_ans = st.session_state.user_answers.get(i)
                     
                     if user_ans == correct_ans:
@@ -407,8 +428,9 @@ else:
                         st.write(f"- **إجابتك:** {user_ans if user_ans else 'لم تقم بالإجابة'}")
                         st.write(f"- **الإجابة النموذجية:** {correct_ans}")
                     
-                    if "explanation" in q_data:
-                        st.info(f"💡 **الشرح والتفسير:** {q_data['explanation']}")
+                    explanation_text = q_data.get('explanation') or q_data.get('desc')
+                    if explanation_text:
+                        st.info(f"💡 **الشرح والتفسير:** {explanation_text}")
                     st.markdown("---")
                 
                 perc = (score / total) * 100
