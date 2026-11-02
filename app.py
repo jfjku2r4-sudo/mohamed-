@@ -38,7 +38,7 @@ st.set_page_config(
 st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&display=swap');
-    
+
     html, body, [class*="css"] {
         font-family: 'Cairo', sans-serif;
     }
@@ -109,7 +109,7 @@ if not st.session_state.logged_in:
     st.markdown("<br><br>", unsafe_allow_html=True)
     st.markdown("<div class='main-header'>🔐 بوابة الدخول للمنصة الذكية</div>", unsafe_allow_html=True)
     st.markdown("<div class='sub-header'>قم بتسجيل الدخول للوصول لكافة الامتحانات والشات الذكي وتحليل الملفات والقوانين</div>", unsafe_allow_html=True)
-    
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         st.markdown("<div class='bright-card'>", unsafe_allow_html=True)
@@ -118,7 +118,7 @@ if not st.session_state.logged_in:
             password = st.text_input("🔑 كلمة المرور", type="password", placeholder="أدخل كلمة المرور...")
             remember_me = st.checkbox("حفظ الجلسة والتسجيل في هذا المتصفح", value=True)
             submit_login = st.form_submit_button("دخول المنصة 🚀")
-            
+
             if submit_login:
                 if password == "01224982634" and input_name.strip() != "":
                     st.session_state.logged_in = True
@@ -130,7 +130,7 @@ if not st.session_state.logged_in:
                 else:
                     st.warning("⚠️ يرجى كتابة اسمك الثلاثي أولاً.")
         st.markdown("</div>", unsafe_allow_html=True)
-                    
+
     st.markdown("<div class='footer'>حقوق الملكية والتطوير محفوظة © <b>محمد عبدالله - Mohamed Abdallah</b> 💻</div>", unsafe_allow_html=True)
 
 else:
@@ -139,7 +139,7 @@ else:
         st.image("https://img.icons8.com/clouds/200/graduation-cap.png", width=100)
         st.markdown(f"### 👤 الطالب: **{st.session_state.username}**")
         st.markdown("---")
-        
+
         st.header("⚙️ إعدادات النموذج والاختبار")
         st.caption("⚡ وضع الاستجابة السريعة مفعّل")
         api_key = st.text_input("🔑 مفتاح Gemini API Key:", type="password", help="أدخل مفتاح Google Gemini API")
@@ -156,7 +156,7 @@ else:
             index=0,
             help="يبدأ الاختيار تلقائياً بأسرع نموذج. يمكنك اختيار نموذج أقوى عند الحاجة."
         )
-        
+
         exam_type = st.radio(
             "📋 نوع إنشاء الاختبار:",
             [
@@ -173,22 +173,20 @@ else:
 
         num_questions = st.number_input("🔢 عدد الأسئلة:", min_value=3, max_value=50, value=10, step=1)
         max_hints = st.number_input("💡 عدد فرص التلميحات المتاحة:", min_value=0, max_value=10, value=3, step=1)
-        
+
         st.markdown("---")
         if st.button("🚪 تسجيل الخروج"):
             st.session_state.logged_in = False
             st.session_state.username = ""
             st.rerun()
-            
+
         st.markdown("<div style='text-align: center; margin-top: 20px; font-size:0.85rem;'><b>منصة الامتحانات الذكية</b><br>تطوير: <b>محمد عبدالله | Mohamed Abdallah</b></div>", unsafe_allow_html=True)
 
     # --- العنوان الرئيسي ---
     st.markdown("<div class='main-header'>🎓 منصة الامتحانات والتحليل الذكي</div>", unsafe_allow_html=True)
 
     # تبويبات المنصة (التحليل والاختبارات + الشات الذكي مع AI)
-    tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])
-
-    # إنشاء عميل Gemini حديث. لا نستخدم google-generativeai القديمة.
+    tab_exam, tab_chat = st.tabs(["📝 ملفات المادة والامتحانات الذكية", "🤖 الشات الذكي والمساعد للتحليل"])    # إنشاء عميل Gemini حديث. لا نستخدم google-generativeai القديمة.
     @st.cache_resource(show_spinner=False)
     def get_working_gemini_model(key):
         if not GEMINI_SUPPORT:
@@ -197,7 +195,8 @@ else:
             )
         return genai.Client(api_key=key)
 
-    # النموذج المختار من القائمة الجانبية؛ الافتراضي هو الأسرع.\n    GEMINI_MODEL = model_choices[selected_model_label]
+    # النموذج المختار من القائمة الجانبية؛ الافتراضي هو الأسرع.
+    GEMINI_MODEL = model_choices[selected_model_label]
     FAST_GENERATION_CONFIG = {"thinking_level": "low"}
 
     def _interaction_text(client, prompt, generation_config=None, max_output_tokens=2048):
@@ -282,7 +281,7 @@ else:
             return scanned_text
         except Exception as e:
             raise RuntimeError(
-                "تعذرت قراءة ملف PDF المصوّر عبر Gemini 3.8 Flash. "
+                "تعذرت قراءة ملف PDF المصوّر عبر Gemini. "
                 "تحقق من صلاحية المفتاح واتصال API ووضوح الملف. التفاصيل: " + str(e)
             ) from e
         finally:
@@ -352,9 +351,7 @@ else:
                 f"تم استلام {len(valid)} سؤالًا صالحًا فقط من أصل {expected_count}. "
                 "لم يتم اعتماد الاختبار حتى لا يظهر ناقصًا؛ أعد المحاولة."
             )
-        return valid[:expected_count]
-
-    def _is_rate_limit_error(exc):
+        return valid[:expected_count]    def _is_rate_limit_error(exc):
         message = str(exc).lower()
         return any(token in message for token in (
             "429", "quota exceeded", "resourceexhausted",
@@ -482,7 +479,7 @@ else:
                                 pdf_text_data = extract_text_from_pdf(uploaded_file, api_key)
                                 st.session_state.pdf_text = pdf_text_data
                                 st.session_state.pdf_fingerprint = pdf_fingerprint
-                            
+
                             st.session_state.hints_used = 0
                             st.session_state.unlocked_hints = set()
 
@@ -509,7 +506,7 @@ else:
                                 st.session_state.quizzes = {
                                     f"اختبار ({selected_single_level})": generate_quiz_with_ai(pdf_text_data, int(num_questions), "level", selected_single_level, api_key)
                                 }
-                                
+
                             st.session_state.submitted_quiz = False
                             st.session_state.show_review_warning = False
                             st.success("✅ تم توليد الامتحان بنجاح وصياغة الأسئلة والمعادلات!")
@@ -524,12 +521,10 @@ else:
                                 "لديه حصة مناسبة."
                             )
                         else:
-                            st.error(f"حدث خطأ أثناء التوليد: {err_message}")
-
-        # عرض الامتحانات
+                            st.error(f"حدث خطأ أثناء التوليد: {err_message}")        # عرض الامتحانات
         if "quizzes" in st.session_state and st.session_state.quizzes:
             st.markdown("---")
-            
+
             quiz_keys = list(st.session_state.quizzes.keys())
             if len(quiz_keys) > 1:
                 tabs_list = st.tabs([f"📌 {k}" for k in quiz_keys])
@@ -540,21 +535,21 @@ else:
                 current_key = quiz_keys[idx]
                 with tab_item:
                     quiz_data = st.session_state.quizzes[current_key]
-                    
+
                     st.markdown(f"<div style='display:flex; justify-content:space-between; align-items:center;'><h4>📝 {current_key} - عدد الأسئلة: {len(quiz_data)}</h4><span>المتبقي من فرص التلميحات: <b>{max(0, max_hints - st.session_state.hints_used)}</b> / {max_hints}</span></div>", unsafe_allow_html=True)
                     st.markdown("---")
 
                     user_answers = {}
                     for i, q_item in enumerate(quiz_data):
                         question_text = q_item.get('q') or q_item.get('question') or q_item.get('question_text') or f"السؤال رقم {i+1} (تعذر العثور على النص)"
-                        
+
                         st.markdown(f"<div class='bright-card'>", unsafe_allow_html=True)
                         st.markdown(f"##### ❓ السؤال {i+1}:")
                         st.write(question_text)
-                        
+
                         hint_key = f"{current_key}_{i}"
                         show_hint_btn = st.checkbox(f"💡 إظهار التلميحة (تستهلك 1 من الفرص)", key=f"chk_hint_{hint_key}")
-                        
+
                         if show_hint_btn:
                             if hint_key not in st.session_state.unlocked_hints:
                                 if st.session_state.hints_used < max_hints:
@@ -562,7 +557,7 @@ else:
                                     st.session_state.unlocked_hints.add(hint_key)
                                 else:
                                     st.warning("⚠️ لقد استنفدت جميع فرص فتح التلميحات لهذا الاختبار!")
-                            
+
                             if hint_key in st.session_state.unlocked_hints:
                                 st.info(f"💡 **تلميح:** {q_item.get('hint', 'لا يوجد تلميح متوفر.')}")
 
@@ -573,7 +568,7 @@ else:
                             key=f"rad_{current_key}_{i}"
                         )
                         user_answers[i] = None if selected_opt == "-- اختر إجابة --" else selected_opt
-                        
+
                         # العلامة المائية المحصورة في كارت الامتحان فقط
                         st.markdown("<div class='exam-watermark'>محمد عبدالله - Mohamed Abdallah</div>", unsafe_allow_html=True)
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -603,14 +598,14 @@ else:
                 quiz = st.session_state.quizzes[active_key]
                 score = 0
                 total = len(quiz)
-                
+
                 st.markdown("<div class='bright-card'>", unsafe_allow_html=True)
                 st.markdown(f"### 📊 النتيجة التفصيلية لاختبار: ({active_key})")
-                
+
                 for i, q_data in enumerate(quiz):
                     correct_ans = q_data.get('answer') or q_data.get('correct_answer')
                     user_ans = st.session_state.user_answers.get(i)
-                    
+
                     if user_ans == correct_ans:
                         score += 1
                         st.success(f"✔️ **السؤال {i+1}: إجابة صحيحة!**")
@@ -618,12 +613,12 @@ else:
                         st.error(f"❌ **السؤال {i+1}: إجابة غير صحيحة**")
                         st.write(f"- **إجابتك:** {user_ans if user_ans else 'لم تقم بالإجابة'}")
                         st.write(f"- **الإجابة النموذجية:** {correct_ans}")
-                    
+
                     explanation_text = q_data.get('explanation') or q_data.get('desc')
                     if explanation_text:
                         st.info(f"💡 **الشرح والتفسير:** {explanation_text}")
                     st.markdown("---")
-                
+
                 perc = (score / total) * 100
                 st.metric("النتيجة النهائية", f"{score} / {total}", f"{perc:.1f}%")
                 if perc >= 85:
@@ -663,11 +658,11 @@ else:
                             استخدم صياغة LaTeX في المعادلة إن وجدت.
                             سؤال الطالب: {user_query}
                             """
-                            
+
                             ans_text = st.write_stream(_stream_chat_answer(model, chat_prompt))
                             if not ans_text:
                                 raise ValueError("لم تصل إجابة من Gemini.")
-                            
+
                             st.session_state.chat_history.append({"user": user_query, "assistant": ans_text})
                             st.rerun()
                         except Exception as e:
